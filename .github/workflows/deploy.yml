@@ -1,0 +1,136 @@
+name: Deploy to VPS
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on semantic version tags (v1.0.0, v1.2.3, etc.)
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to create releases
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [ "${{ github.ref_type }}" == "tag" ]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Deploying version: $VERSION"
+          else
+            echo "version=manual-$(date +%Y%m%d-%H%M%S)" >> $GITHUB_OUTPUT
+            echo "Manual deployment triggered"
+          fi
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Create deployment directory on VPS
+        run: |
+          ssh ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} "mkdir -p ~/v3trading"
+
+      - name: Copy files to VPS
+        run: |
+          rsync -avz --delete \
+            --exclude '.git' \
+            --exclude 'node_modules' \
+            --exclude '__pycache__' \
+            --exclude 'venv' \
+            --exclude '.env' \
+            ./ ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }}:~/v3trading/
+
+      - name: Create .env file on VPS
+        run: |
+          ssh ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} << 'EOF'
+            cat > ~/v3trading/backend/.env << 'ENVEOF'
+          GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+          JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+          JWT_ALGORITHM=HS256
+          BACKEND_URL=${{ secrets.FRONTEND_URL }}
+          FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+          CORS_ORIGINS=${{ secrets.FRONTEND_URL }}
+          ENVEOF
+          EOF
+
+      - name: Deploy with Docker Compose
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          ssh ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} << EOF
+            cd ~/v3trading
+
+            # Record deployment version
+            echo "$VERSION" > .deployment-version
+            echo "Deployment Time: \$(date)" >> .deployment-version
+            echo "Commit: \${{ github.sha }}" >> .deployment-version
+
+            # Pull latest images and rebuild
+            docker compose down
+            docker compose build --no-cache
+
+            # Tag images with version
+            docker tag v3trading-backend v3trading-backend:$VERSION
+            docker tag v3trading-frontend v3trading-frontend:$VERSION
+
+            # Start services
+            docker compose up -d
+
+            # Clean up old untagged images
+            docker image prune -f
+          EOF
+
+      - name: Verify deployment
+        run: |
+          ssh ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} << 'EOF'
+            cd ~/v3trading
+            docker compose ps
+            echo "Waiting for services to be healthy..."
+            sleep 10
+            docker compose ps
+          EOF
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ steps.version.outputs.version }}
+          body: |
+            ## 🚀 Deployment Information
+
+            **Version:** ${{ steps.version.outputs.version }}
+            **Deployed:** ${{ github.event.head_commit.timestamp }}
+            **Commit:** ${{ github.sha }}
+
+            ## 📝 Changes
+
+            ${{ github.event.head_commit.message }}
+
+            ## 🔗 Links
+
+            - [View Deployment](${{ secrets.FRONTEND_URL }})
+            - [API Documentation](${{ secrets.FRONTEND_URL }}/docs)
+
+            ---
+
+            **Note:** This release was automatically deployed to production VPS.
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_rsa

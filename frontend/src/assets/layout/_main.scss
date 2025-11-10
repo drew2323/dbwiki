@@ -1,0 +1,27 @@
+.layout-main-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    justify-content: space-between;
+    padding: 6rem 1.5rem 0 1.5rem;
+    transition: margin-left var(--layout-section-transition-duration), padding-top var(--layout-section-transition-duration);
+    background: var(--surface-50);
+    
+    @media (min-width: 768px) {
+        padding: 6rem 2rem 0 2rem;
+    }
+}
+
+.app-dark .layout-main-container {
+    background: var(--surface-950);
+}
+
+.layout-main {
+    flex: 1 1 auto;
+    padding-bottom: 2rem;
+}
+
+.layout-wrapper {
+    position: relative;
+    transition: all var(--layout-section-transition-duration);
+}

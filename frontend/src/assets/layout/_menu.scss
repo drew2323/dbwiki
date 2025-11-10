@@ -1,0 +1,509 @@
+@use 'mixins' as *;
+
+.layout-sidebar {
+    position: fixed;
+    width: 16rem;
+    height: calc(100vh - 8rem);
+    z-index: 999;
+    overflow-y: auto;
+    user-select: none;
+    top: 6rem;
+    left: 0rem;
+    transition:
+        transform var(--layout-section-transition-duration),
+        left var(--layout-section-transition-duration);
+    background-color: var(--surface-overlay);
+    border-radius: var(--content-border-radius);
+    padding: 0.5rem 1.5rem;
+}
+
+.layout-menu {
+    margin: 0;
+    padding: 0;
+    list-style-type: none;
+
+    .layout-root-menuitem {
+        > .layout-menuitem-root-text {
+            font-size: 0.857rem;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: var(--text-color);
+            margin: 0.75rem 0;
+        }
+
+        > a {
+            display: none;
+        }
+    }
+
+    a {
+        user-select: none;
+
+        &.active-menuitem {
+            > .layout-submenu-toggler {
+                transform: rotate(-180deg);
+            }
+        }
+    }
+
+    li.active-menuitem {
+        > a {
+            .layout-submenu-toggler {
+                transform: rotate(-180deg);
+            }
+        }
+    }
+
+    ul {
+        margin: 0;
+        padding: 0;
+        list-style-type: none;
+
+        a {
+            display: flex;
+            align-items: center;
+            position: relative;
+            outline: 0 none;
+            color: var(--text-color);
+            cursor: pointer;
+            padding: 0.75rem 1rem;
+            border-radius: var(--content-border-radius);
+            transition:
+                background-color var(--element-transition-duration),
+                box-shadow var(--element-transition-duration);
+
+            .layout-menuitem-icon {
+                margin-right: 0.5rem;
+            }
+
+            .layout-submenu-toggler {
+                font-size: 75%;
+                margin-left: auto;
+                transition: transform var(--element-transition-duration);
+            }
+
+            &.active-route {
+                font-weight: 700;
+                color: var(--primary-color);
+            }
+
+            &:hover {
+                background-color: var(--surface-hover);
+            }
+
+            &:focus {
+                @include focused-inset();
+            }
+        }
+
+        ul {
+            overflow: hidden;
+            border-radius: var(--content-border-radius);
+
+            li {
+                a {
+                    margin-left: 1rem;
+                }
+
+                li {
+                    a {
+                        margin-left: 2rem;
+                    }
+
+                    li {
+                        a {
+                            margin-left: 2.5rem;
+                        }
+
+                        li {
+                            a {
+                                margin-left: 3rem;
+                            }
+
+                            li {
+                                a {
+                                    margin-left: 3.5rem;
+                                }
+
+                                li {
+                                    a {
+                                        margin-left: 4rem;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+.layout-submenu-enter-from,
+.layout-submenu-leave-to {
+    max-height: 0;
+}
+
+.layout-submenu-enter-to,
+.layout-submenu-leave-from {
+    max-height: 1000px;
+}
+
+.layout-submenu-leave-active {
+    overflow: hidden;
+    transition: max-height 0.45s cubic-bezier(0, 1, 0, 1);
+}
+
+.layout-submenu-enter-active {
+    overflow: hidden;
+    transition: max-height 1s ease-in-out;
+}
+
+// Different Menu Layout Modes
+
+// Static Mode (default)
+.layout-static {
+    .layout-main-container {
+        margin-left: 17rem;
+    }
+}
+
+// Overlay Mode
+.layout-overlay {
+    .layout-sidebar {
+        transform: translateX(-100%);
+    }
+    
+    &.layout-overlay-active {
+        .layout-sidebar {
+            transform: translateX(0);
+        }
+    }
+    
+    .layout-main-container {
+        margin-left: 0;
+    }
+}
+
+// Slim Mode - Icons only, text on hover
+.layout-slim {
+    .layout-sidebar {
+        width: 5rem;
+        overflow: visible;
+        
+        .layout-menu {
+            ul {
+                a {
+                    justify-content: center;
+                    position: relative;
+                    
+                    .layout-menuitem-text,
+                    .layout-submenu-toggler {
+                        display: none;
+                    }
+                    
+                    .layout-menuitem-icon {
+                        margin-right: 0;
+                    }
+                    
+                    // Show text on hover for individual items
+                    &:hover {
+                        width: auto;
+                        min-width: 15rem;
+                        background-color: var(--surface-overlay);
+                        z-index: 1000;
+                        box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+                        
+                        .layout-menuitem-text,
+                        .layout-submenu-toggler {
+                            display: inline;
+                        }
+                        
+                        .layout-menuitem-icon {
+                            margin-right: 0.5rem;
+                        }
+                    }
+                }
+            }
+        }
+        
+        .layout-root-menuitem {
+            > .layout-menuitem-root-text {
+                display: none;
+            }
+        }
+    }
+    
+    .layout-main-container {
+        margin-left: 5rem;
+    }
+}
+
+// Compact Mode - Icons only, no text
+.layout-compact {
+    .layout-sidebar {
+        width: 4rem;
+        
+        .layout-menu {
+            ul {
+                a {
+                    justify-content: center;
+                    
+                    .layout-menuitem-text,
+                    .layout-submenu-toggler {
+                        display: none;
+                    }
+                    
+                    .layout-menuitem-icon {
+                        margin-right: 0;
+                    }
+                }
+            }
+        }
+        
+        .layout-root-menuitem {
+            > .layout-menuitem-root-text {
+                display: none;
+            }
+        }
+    }
+    
+    .layout-main-container {
+        margin-left: 4rem;
+    }
+}
+
+// Reveal Mode - Hover to reveal
+.layout-reveal {
+    .layout-sidebar {
+        width: 5rem;
+        overflow-x: hidden;
+        overflow-y: auto;
+        transition: width 0.4s cubic-bezier(0.6, 0.43, 0, 0.97);
+
+        &:hover {
+            width: 16rem;
+        }
+
+        .layout-menu {
+            ul {
+                a {
+                    justify-content: flex-start;
+                    align-items: center;
+                    padding-left: 0;
+                    padding-right: 0;
+                    min-height: 2.5rem;
+                    transition: padding 0.4s cubic-bezier(0.6, 0.43, 0, 0.97);
+
+                    .layout-menuitem-icon {
+                        margin-right: 0;
+                        margin-left: 1.125rem;
+                        transition: margin 0.4s cubic-bezier(0.6, 0.43, 0, 0.97);
+                        opacity: 1;
+                        visibility: visible;
+                        flex-shrink: 0;
+                    }
+
+                    .layout-menuitem-text {
+                        opacity: 0;
+                        visibility: hidden;
+                        white-space: nowrap;
+                        transition:
+                            opacity 0.4s cubic-bezier(0.6, 0.43, 0, 0.97) 0.05s,
+                            visibility 0.4s cubic-bezier(0.6, 0.43, 0, 0.97) 0.05s;
+                        margin-left: 0.5rem;
+                        flex: 1;
+                    }
+
+                    .layout-submenu-toggler {
+                        opacity: 0;
+                        visibility: hidden;
+                        white-space: nowrap;
+                        transition:
+                            opacity 0.4s cubic-bezier(0.6, 0.43, 0, 0.97) 0.05s,
+                            visibility 0.4s cubic-bezier(0.6, 0.43, 0, 0.97) 0.05s;
+                        margin-left: auto;
+                        margin-right: 0.5rem;
+                        flex-shrink: 0;
+                    }
+                }
+            }
+        }
+
+        &:hover {
+            .layout-menu {
+                ul {
+                    a {
+                        padding-left: 1rem;
+                        padding-right: 1rem;
+
+                        .layout-menuitem-icon {
+                            margin-left: 0;
+                            margin-right: 0.5rem;
+                        }
+
+                        .layout-menuitem-text {
+                            opacity: 1;
+                            visibility: visible;
+                        }
+
+                        .layout-submenu-toggler {
+                            opacity: 1;
+                            visibility: visible;
+                        }
+                    }
+                }
+            }
+        }
+
+        .layout-root-menuitem {
+            > .layout-menuitem-root-text {
+                opacity: 1;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+        }
+    }
+
+    .layout-main-container {
+        margin-left: 4rem;
+        transition: margin-left 0.4s cubic-bezier(0.6, 0.43, 0, 0.97);
+    }
+}
+
+// Drawer Mode - Slide in/out drawer
+.layout-drawer {
+    .layout-sidebar {
+        display: none; // Hidden by default, shown via Drawer component
+    }
+    
+    .layout-main-container {
+        margin-left: 0;
+    }
+}
+
+// Horizontal Mode - Menu at top
+.layout-horizontal {
+    .layout-sidebar {
+        display: none;
+    }
+    
+    .layout-horizontal-menu {
+        position: fixed;
+        top: 4rem;
+        left: 0;
+        right: 0;
+        z-index: 998;
+        background-color: var(--surface-overlay);
+        border-bottom: 1px solid var(--surface-border);
+        padding: 0 2rem;
+        
+        .layout-menu {
+            display: flex;
+            justify-content: flex-start;
+            
+            > li {
+                position: relative;
+                
+                > a {
+                    display: flex;
+                    align-items: center;
+                    padding: 1rem 1.5rem;
+                    white-space: nowrap;
+                }
+                
+                // Dropdown submenus
+                ul {
+                    position: absolute;
+                    top: 100%;
+                    left: 0;
+                    background-color: var(--surface-overlay);
+                    border: 1px solid var(--surface-border);
+                    border-radius: var(--content-border-radius);
+                    box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+                    min-width: 200px;
+                    display: none;
+                    
+                    &.show {
+                        display: block;
+                    }
+                }
+            }
+        }
+    }
+    
+    .layout-main-container {
+        margin-left: 0;
+        padding-top: 8rem; // Account for both topbar and horizontal menu
+    }
+}
+
+// Static menu inactive state
+.layout-static-inactive {
+    .layout-sidebar {
+        transform: translateX(-100%);
+    }
+    
+    .layout-main-container {
+        margin-left: 0;
+    }
+}
+
+// Mobile responsive
+@media (max-width: 991px) {
+    .layout-slim,
+    .layout-compact,
+    .layout-reveal {
+        .layout-sidebar {
+            width: 16rem;
+            transform: translateX(-100%);
+        }
+
+        .layout-main-container {
+            margin-left: 0;
+        }
+
+        &.layout-mobile-active {
+            .layout-sidebar {
+                transform: translateX(0);
+            }
+        }
+    }
+
+    // Override reveal mode styles on mobile to show text always
+    .layout-reveal {
+        .layout-sidebar {
+            .layout-menu {
+                ul {
+                    a {
+                        padding-left: 1rem;
+                        padding-right: 1rem;
+
+                        .layout-menuitem-icon {
+                            margin-left: 0;
+                            margin-right: 0.5rem;
+                        }
+
+                        .layout-menuitem-text {
+                            opacity: 1;
+                            visibility: visible;
+                        }
+
+                        .layout-submenu-toggler {
+                            opacity: 1;
+                            visibility: visible;
+                        }
+                    }
+                }
+            }
+
+            .layout-root-menuitem {
+                > .layout-menuitem-root-text {
+                    opacity: 1;
+                    visibility: visible;
+                }
+            }
+        }
+    }
+}
