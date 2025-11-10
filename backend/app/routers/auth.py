@@ -82,7 +82,9 @@ async def auth_callback(request: Request, response: Response):
         return redirect_response
 
     except Exception as e:
+        import traceback
         print(f"Auth error: {e}")
+        print(f"Traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=400, detail=f"Authentication failed: {str(e)}")
 
 
