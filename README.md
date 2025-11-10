@@ -1,6 +1,6 @@
-# V3Trading
+# DBWIKI
 
-A full-stack trading application with Python FastAPI backend and Vue 3 TypeScript frontend, featuring Google OAuth authentication and mock trading API.
+Modern Wiki platform with Python FastAPI backend and Vue 3 TypeScript frontend, featuring Google OAuth authentication.
 
 ## 🚀 Features
 
