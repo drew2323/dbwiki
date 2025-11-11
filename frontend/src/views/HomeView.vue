@@ -1,7 +1,7 @@
   <!-- Pohrobek - move away -->
 <template>
   <div class="home">
-    <h1>Welcome to V3Trading</h1>
+    <h1>Welcome to DBWiki</h1>
 
     <!-- Loading State -->
     <div v-if="authStore.loading" class="loading">Loading...</div>

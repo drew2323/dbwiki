@@ -1,15 +1,101 @@
-<script setup>
-import FloatingConfigurator from '@/components/FloatingConfigurator.vue';
-import { ref } from 'vue';
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/authStore'
+import { useToast } from 'primevue/usetoast'
 
-const username = ref('');
-const email = ref('');
-const password = ref('');
-const termsAccepted = ref(false);
+const router = useRouter()
+const authStore = useAuthStore()
+const toast = useToast()
+
+const email = ref('')
+const username = ref('')
+const name = ref('')
+const password = ref('')
+const confirmPassword = ref('')
+const loading = ref(false)
+const errorMessage = ref('')
+const errors = ref<Record<string, string>>({})
+
+const validateForm = () => {
+  errors.value = {}
+  let isValid = true
+
+  if (!email.value) {
+    errors.value.email = 'Email is required'
+    isValid = false
+  } else if (!/\S+@\S+\.\S+/.test(email.value)) {
+    errors.value.email = 'Email is invalid'
+    isValid = false
+  }
+
+  if (!username.value) {
+    errors.value.username = 'Username is required'
+    isValid = false
+  } else if (username.value.length < 3) {
+    errors.value.username = 'Username must be at least 3 characters'
+    isValid = false
+  }
+
+  if (!password.value) {
+    errors.value.password = 'Password is required'
+    isValid = false
+  } else if (password.value.length < 8) {
+    errors.value.password = 'Password must be at least 8 characters'
+    isValid = false
+  }
+
+  if (password.value !== confirmPassword.value) {
+    errors.value.confirmPassword = 'Passwords do not match'
+    isValid = false
+  }
+
+  return isValid
+}
+
+const handleRegister = async () => {
+  if (!validateForm()) {
+    return
+  }
+
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    await authStore.register({
+      email: email.value,
+      username: username.value,
+      password: password.value,
+      name: name.value || undefined
+    })
+
+    toast.add({
+      severity: 'success',
+      summary: 'Success',
+      detail: 'Account created successfully! Please check your email to verify your account.',
+      life: 5000
+    })
+
+    router.push('/auth/login')
+  } catch (error: any) {
+    errorMessage.value = error.response?.data?.detail || 'Registration failed. Please try again.'
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: errorMessage.value,
+      life: 5000
+    })
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleGoogleSignup = () => {
+  authStore.login()
+}
 </script>
 
 <template>
-    <FloatingConfigurator />
     <div class="min-h-screen bg-surface-50 dark:bg-surface-950 flex">
         <!-- Left Side - Form -->
         <div class="flex-1 flex items-center justify-center p-8">
@@ -33,9 +119,10 @@ const termsAccepted = ref(false);
 
                     <!-- Social Register Buttons -->
                     <div class="space-y-3">
-                        <Button 
+                        <Button
                             class="w-full h-12 bg-surface-0 dark:bg-surface-900 border border-surface-300 dark:border-surface-600 text-surface-900 dark:text-surface-0 hover:bg-surface-50 dark:hover:bg-surface-800"
                             outlined
+                            @click="handleGoogleSignup"
                         >
                             <svg class="w-5 h-5 mr-3" viewBox="0 0 24 24">
                                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -44,16 +131,6 @@ const termsAccepted = ref(false);
                                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                             </svg>
                             Register with Google
-                        </Button>
-                        
-                        <Button 
-                            class="w-full h-12 bg-surface-0 dark:bg-surface-900 border border-surface-300 dark:border-surface-600 text-surface-900 dark:text-surface-0 hover:bg-surface-50 dark:hover:bg-surface-800"
-                            outlined
-                        >
-                            <svg class="w-5 h-5 mr-3" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.174-.105-.949-.199-2.403.042-3.441.219-.937 1.404-5.965 1.404-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738.098.119.112.224.083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.357-.631-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146C9.57 23.812 10.763 24.009 12.017 24.009c6.624 0 11.99-5.367 11.99-11.988C24.007 5.367 18.641.001 12.017.001z"/>
-                            </svg>
-                            Register with Apple
                         </Button>
                     </div>
 
@@ -67,26 +144,42 @@ const termsAccepted = ref(false);
                     </div>
 
                     <!-- Registration Form -->
-                    <div class="space-y-4">
+                    <form @submit.prevent="handleRegister" class="space-y-4">
                         <div>
-                            <label for="username" class="block text-sm font-medium text-surface-900 dark:text-surface-0 mb-2">Username</label>
-                            <InputText 
-                                id="username" 
-                                v-model="username" 
-                                type="text" 
-                                placeholder="Enter your username"
+                            <label for="email" class="block text-sm font-medium text-surface-900 dark:text-surface-0 mb-2">Email</label>
+                            <InputText
+                                id="email"
+                                v-model="email"
+                                type="email"
+                                placeholder="Enter your email"
                                 class="w-full h-12"
                                 fluid
+                                :invalid="!!errors.email"
                             />
+                            <small v-if="errors.email" class="text-red-500">{{ errors.email }}</small>
                         </div>
 
                         <div>
-                            <label for="email" class="block text-sm font-medium text-surface-900 dark:text-surface-0 mb-2">Email</label>
-                            <InputText 
-                                id="email" 
-                                v-model="email" 
-                                type="email" 
-                                placeholder="Enter your email"
+                            <label for="username" class="block text-sm font-medium text-surface-900 dark:text-surface-0 mb-2">Username</label>
+                            <InputText
+                                id="username"
+                                v-model="username"
+                                type="text"
+                                placeholder="Enter your username"
+                                class="w-full h-12"
+                                fluid
+                                :invalid="!!errors.username"
+                            />
+                            <small v-if="errors.username" class="text-red-500">{{ errors.username }}</small>
+                        </div>
+
+                        <div>
+                            <label for="name" class="block text-sm font-medium text-surface-900 dark:text-surface-0 mb-2">Full Name (Optional)</label>
+                            <InputText
+                                id="name"
+                                v-model="name"
+                                type="text"
+                                placeholder="Enter your full name"
                                 class="w-full h-12"
                                 fluid
                             />
@@ -94,32 +187,45 @@ const termsAccepted = ref(false);
 
                         <div>
                             <label for="password" class="block text-sm font-medium text-surface-900 dark:text-surface-0 mb-2">Password</label>
-                            <Password 
-                                id="password" 
-                                v-model="password" 
+                            <Password
+                                id="password"
+                                v-model="password"
                                 placeholder="Create a password"
+                                :toggleMask="true"
+                                class="w-full"
+                                fluid
+                                :feedback="true"
+                                inputClass="h-12"
+                                :invalid="!!errors.password"
+                            />
+                            <small v-if="errors.password" class="text-red-500">{{ errors.password }}</small>
+                        </div>
+
+                        <div>
+                            <label for="confirmPassword" class="block text-sm font-medium text-surface-900 dark:text-surface-0 mb-2">Confirm Password</label>
+                            <Password
+                                id="confirmPassword"
+                                v-model="confirmPassword"
+                                placeholder="Confirm your password"
                                 :toggleMask="true"
                                 class="w-full"
                                 fluid
                                 :feedback="false"
                                 inputClass="h-12"
+                                :invalid="!!errors.confirmPassword"
                             />
+                            <small v-if="errors.confirmPassword" class="text-red-500">{{ errors.confirmPassword }}</small>
                         </div>
 
-                        <div class="flex items-center">
-                            <Checkbox v-model="termsAccepted" id="terms" binary class="mr-2" />
-                            <label for="terms" class="text-sm text-surface-700 dark:text-surface-300">
-                                I have read the <a href="#" class="text-primary hover:underline">Terms and Conditions</a>
-                            </label>
-                        </div>
+                        <Message v-if="errorMessage" severity="error" :closable="false">{{ errorMessage }}</Message>
 
-                        <Button label="Register" class="w-full h-12" as="router-link" to="/" />
+                        <Button type="submit" label="Register" class="w-full h-12" :loading="loading" />
 
                         <div class="text-center text-sm text-surface-600 dark:text-surface-400">
-                            Already have an account? 
-                            <router-link to="/auth/login-alt" class="text-primary hover:underline">Login</router-link>
+                            Already have an account?
+                            <router-link to="/auth/login" class="text-primary hover:underline">Login</router-link>
                         </div>
-                    </div>
+                    </form>
                 </div>
 
                 <!-- Footer -->

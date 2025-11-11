@@ -1,13 +1,55 @@
-<script setup>
+<script setup lang="ts">
 import FloatingConfigurator from '@/components/FloatingConfigurator.vue';
 import { useAuthStore } from '@/stores/authStore';
+import { useRouter } from 'vue-router';
+import { useToast } from 'primevue/usetoast';
 import { ref } from 'vue';
 
 const authStore = useAuthStore();
+const router = useRouter();
+const toast = useToast();
 
 const email = ref('');
 const password = ref('');
 const checked = ref(false);
+const loading = ref(false);
+const errorMessage = ref('');
+
+async function handleEmailLogin() {
+    if (!email.value || !password.value) {
+        toast.add({
+            severity: 'warn',
+            summary: 'Warning',
+            detail: 'Please enter email and password',
+            life: 3000
+        });
+        return;
+    }
+
+    loading.value = true;
+    errorMessage.value = '';
+
+    try {
+        await authStore.emailLogin(email.value, password.value);
+        toast.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Logged in successfully',
+            life: 3000
+        });
+        router.push('/');
+    } catch (error: any) {
+        errorMessage.value = error.response?.data?.detail || 'Login failed. Please check your credentials.';
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: errorMessage.value,
+            life: 5000
+        });
+    } finally {
+        loading.value = false;
+    }
+}
 
 function handleGoogleLogin() {
     authStore.login();
@@ -38,7 +80,7 @@ function handleGoogleLogin() {
                                 />
                             </g>
                         </svg>
-                        <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4">Welcome to V3Trading!</div>
+                        <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4">Welcome to DBWiki!</div>
                         <span class="text-muted-color font-medium">Sign in to continue</span>
                     </div>
 
@@ -70,12 +112,10 @@ function handleGoogleLogin() {
                         </div>
                     </div>
 
-                    <div>
-                        <!-- <label for="email1" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">Email</label> -->
-                        <InputText id="email1" type="text" placeholder="Email address" class="w-full md:w-[30rem] mb-8" v-model="email" />
+                    <form @submit.prevent="handleEmailLogin">
+                        <InputText id="email1" type="email" placeholder="Email address" class="w-full md:w-[30rem] mb-8" v-model="email" required />
 
-                        <!-- <label for="password1" class="block text-surface-900 dark:text-surface-0 font-medium text-xl mb-2">Password</label> -->
-                        <Password id="password1" v-model="password" placeholder="Password" :toggleMask="true" class="mb-4" fluid :feedback="false"></Password>
+                        <Password id="password1" v-model="password" placeholder="Password" :toggleMask="true" class="mb-4" fluid :feedback="false" required></Password>
 
                         <div class="flex items-center justify-between mt-2 mb-8 gap-8">
                             <div class="flex items-center">
@@ -84,8 +124,16 @@ function handleGoogleLogin() {
                             </div>
                             <a href="#" class="text-sm text-primary hover:underline">Forgot password?</a>
                         </div>
-                        <Button label="Sign In" class="w-full" as="router-link" to="/"></Button>
-                    </div>
+
+                        <Message v-if="errorMessage" severity="error" :closable="false" class="mb-4">{{ errorMessage }}</Message>
+
+                        <Button type="submit" label="Sign In" class="w-full mb-4" :loading="loading"></Button>
+
+                        <div class="text-center text-sm text-surface-600 dark:text-surface-400">
+                            Don't have an account?
+                            <router-link to="/auth/register" class="text-primary hover:underline">Register</router-link>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>

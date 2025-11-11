@@ -1,12 +1,23 @@
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response, Depends
 from fastapi.responses import RedirectResponse
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
+from sqlalchemy.orm import Session
 import os
+import uuid
+import secrets
+from datetime import datetime, timedelta, timezone
 
-from app.models.user import User
-from app.utils.mock_users import get_user_by_google_id, create_user, update_last_login
+from app.models.user import (
+    User, UserResponse, UserCreate, UserLogin,
+    PasswordResetRequest, PasswordReset, EmailVerification
+)
+from app.database import get_db
+from app.crud import users as user_crud
+from app.crud import roles as role_crud
+from app.crud import tenants as tenant_crud
 from app.utils.auth import create_access_token
+from app.utils.password import verify_password, get_password_hash
 
 # OAuth configuration
 config = Config(environ={
@@ -27,16 +38,101 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 
+# Email/Password Authentication
+@router.post("/register", response_model=UserResponse)
+async def register(user_data: UserCreate, db: Session = Depends(get_db)):
+    """Register a new user with email and password"""
+    # Check if user already exists
+    if user_crud.get_user_by_email(db, user_data.email):
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    if user_crud.get_user_by_username(db, user_data.username):
+        raise HTTPException(status_code=400, detail="Username already taken")
+
+    # Get default tenant and viewer role
+    default_tenant = tenant_crud.get_default_tenant(db)
+    if not default_tenant:
+        raise HTTPException(status_code=500, detail="Default tenant not found")
+
+    viewer_role = role_crud.get_role_by_name(db, "Viewer", default_tenant.id)
+    if not viewer_role:
+        raise HTTPException(status_code=500, detail="Viewer role not found")
+
+    # Hash password
+    password_hash = get_password_hash(user_data.password)
+
+    # Generate verification token
+    verification_token = secrets.token_urlsafe(32)
+
+    # Create user
+    user = user_crud.create_user(
+        db=db,
+        email=user_data.email,
+        username=user_data.username,
+        password_hash=password_hash,
+        default_tenant_id=default_tenant.id,
+        role_id=viewer_role.id,
+        name=user_data.name,
+        is_verified=False
+    )
+
+    # Update verification token
+    user_crud.update_user_verification_token(db, user.id, verification_token)
+
+    # TODO: Send verification email
+    # For now, we'll just log it
+    print(f"Verification token for {user.email}: {verification_token}")
+
+    # Refresh to get role relationship
+    db.refresh(user)
+    return user
+
+
+@router.post("/login")
+async def login(credentials: UserLogin, response: Response, db: Session = Depends(get_db)):
+    """Login with email and password"""
+    # Get user by email
+    user = user_crud.get_user_by_email(db, credentials.email)
+    if not user or not user.password_hash:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    # Verify password
+    if not verify_password(credentials.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    # Check if user is active
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account is deactivated")
+
+    # Update last login
+    user_crud.update_user_last_login(db, user.id)
+
+    # Create JWT token
+    access_token = create_access_token(data={"sub": user.id, "email": user.email})
+
+    # Set httpOnly cookie
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=False,  # Set to True in production with HTTPS
+        samesite="lax",
+        max_age=60 * 60 * 24 * 7  # 7 days
+    )
+
+    return {"message": "Logged in successfully"}
+
+
+# Google OAuth Authentication
 @router.get("/google")
 async def login_google(request: Request):
     """Initiate Google OAuth flow"""
-    # Use BACKEND_URL for OAuth callback (works in both dev and production)
     redirect_uri = f"{BACKEND_URL}/api/auth/callback"
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
 @router.get("/callback")
-async def auth_callback(request: Request, response: Response):
+async def auth_callback(request: Request, response: Response, db: Session = Depends(get_db)):
     """Handle Google OAuth callback"""
     try:
         # Get the token from Google
@@ -52,18 +148,40 @@ async def auth_callback(request: Request, response: Response):
         name = user_info.get('name')
         picture = user_info.get('picture')
 
-        # Get or create user
-        user = get_user_by_google_id(google_id)
+        # Try to find user by google_id or email
+        user = user_crud.get_user_by_google_id(db, google_id)
+
         if not user:
-            user = create_user(
+            # Check if email exists (link accounts)
+            user = user_crud.get_user_by_email(db, email)
+            if user and not user.google_id:
+                # Link Google account to existing email account
+                from app.models.db_models import User as DBUser
+                db.query(DBUser).filter(DBUser.id == user.id).update({"google_id": google_id})
+                db.commit()
+                db.refresh(user)
+
+        if not user:
+            # Get default tenant and viewer role
+            default_tenant = tenant_crud.get_default_tenant(db)
+            viewer_role = role_crud.get_role_by_name(db, "Viewer", default_tenant.id)
+
+            # Create new user with Google OAuth
+            username = email.split('@')[0] + "_" + secrets.token_hex(4)
+            user = user_crud.create_user(
+                db=db,
                 email=email,
-                name=name,
+                username=username,
                 google_id=google_id,
-                picture=picture
+                name=name,
+                picture=picture,
+                default_tenant_id=default_tenant.id,
+                role_id=viewer_role.id,
+                is_verified=True  # OAuth users are auto-verified
             )
         else:
             # Update last login
-            update_last_login(user.id)
+            user_crud.update_user_last_login(db, user.id)
 
         # Create JWT token
         access_token = create_access_token(data={"sub": user.id, "email": user.email})
@@ -88,11 +206,10 @@ async def auth_callback(request: Request, response: Response):
         raise HTTPException(status_code=400, detail=f"Authentication failed: {str(e)}")
 
 
-@router.get("/me", response_model=User)
-async def get_current_user(request: Request):
+@router.get("/me", response_model=UserResponse)
+async def get_current_user(request: Request, db: Session = Depends(get_db)):
     """Get current authenticated user"""
     from app.utils.auth import verify_token
-    from app.utils.mock_users import get_user_by_id
 
     # Get token from cookie
     token = request.cookies.get("access_token")
@@ -106,9 +223,12 @@ async def get_current_user(request: Request):
         raise HTTPException(status_code=401, detail="Invalid token")
 
     # Get user
-    user = get_user_by_id(user_id)
+    user = user_crud.get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account is deactivated")
 
     return user
 
@@ -118,3 +238,40 @@ async def logout(response: Response):
     """Logout user by clearing the cookie"""
     response.delete_cookie("access_token")
     return {"message": "Logged out successfully"}
+
+
+# Email verification and password reset
+@router.post("/verify-email")
+async def verify_email(data: EmailVerification, db: Session = Depends(get_db)):
+    """Verify user email with token"""
+    user = user_crud.verify_user(db, data.token)
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification token")
+    return {"message": "Email verified successfully"}
+
+
+@router.post("/request-password-reset")
+async def request_password_reset(data: PasswordResetRequest, db: Session = Depends(get_db)):
+    """Request password reset email"""
+    user = user_crud.get_user_by_email(db, data.email)
+    if user:
+        # Generate reset token
+        reset_token = secrets.token_urlsafe(32)
+        expires = datetime.now(timezone.utc) + timedelta(hours=1)
+        user_crud.update_reset_token(db, user.id, reset_token, expires)
+
+        # TODO: Send password reset email
+        print(f"Password reset token for {user.email}: {reset_token}")
+
+    # Always return success to prevent email enumeration
+    return {"message": "If the email exists, a password reset link has been sent"}
+
+
+@router.post("/reset-password")
+async def reset_password(data: PasswordReset, db: Session = Depends(get_db)):
+    """Reset password with token"""
+    password_hash = get_password_hash(data.new_password)
+    user = user_crud.reset_password(db, data.token, password_hash)
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+    return {"message": "Password reset successfully"}

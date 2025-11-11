@@ -20,7 +20,7 @@
                             />
                         </g>
                     </svg>
-                    <h4 class="font-medium text-3xl text-surface-900 dark:text-surface-0">V3TRADING</h4>
+                    <h4 class="font-medium text-3xl text-surface-900 dark:text-surface-0">DBWiki</h4>
                 </a>
             </div>
 

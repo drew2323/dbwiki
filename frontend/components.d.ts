@@ -24,6 +24,7 @@ declare module 'vue' {
     LightweightChart: typeof import('./src/components/LightweightChart.vue')['default']
     MarkerModal: typeof import('./src/components/MarkerModal.vue')['default']
     Menu: typeof import('primevue/menu')['default']
+    Message: typeof import('primevue/message')['default']
     NotificationsWidget: typeof import('./src/components/dashboard/NotificationsWidget.vue')['default']
     Password: typeof import('primevue/password')['default']
     PricingWidget: typeof import('./src/components/landing/PricingWidget.vue')['default']
@@ -34,6 +35,7 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     SelectButton: typeof import('primevue/selectbutton')['default']
     StatsWidget: typeof import('./src/components/dashboard/StatsWidget.vue')['default']
+    TenantSwitcher: typeof import('./src/components/TenantSwitcher.vue')['default']
     Toast: typeof import('primevue/toast')['default']
     TopbarWidget: typeof import('./src/components/landing/TopbarWidget.vue')['default']
   }

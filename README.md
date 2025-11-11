@@ -5,7 +5,6 @@ Modern Wiki platform with Python FastAPI backend and Vue 3 TypeScript frontend, 
 ## 🚀 Features
 
 - **Google OAuth Authentication** - Secure login with Google accounts
-- **Trading API** - Mock trading endpoints for trades and positions
 - **Real-time State Management** - Pinia stores with TypeScript
 - **Protected Routes** - Authentication guards for secure pages
 - **RESTful API** - FastAPI with automatic OpenAPI documentation

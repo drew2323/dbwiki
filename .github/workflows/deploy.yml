@@ -49,10 +49,12 @@ jobs:
             --exclude '.env' \
             ./ ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }}:~/v3trading/
 
-      - name: Create .env file on VPS
+      - name: Create .env files on VPS
         run: |
           ssh ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} << 'EOF'
+            # Backend .env
             cat > ~/v3trading/backend/.env << 'ENVEOF'
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
           GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
           JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
@@ -60,6 +62,13 @@ jobs:
           BACKEND_URL=${{ secrets.FRONTEND_URL }}
           FRONTEND_URL=${{ secrets.FRONTEND_URL }}
           CORS_ORIGINS=${{ secrets.FRONTEND_URL }}
+          ENVEOF
+
+            # Root .env for docker-compose (PostgreSQL credentials)
+            cat > ~/v3trading/.env << 'ENVEOF'
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
           ENVEOF
           EOF
 

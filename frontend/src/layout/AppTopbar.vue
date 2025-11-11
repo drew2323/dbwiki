@@ -1,11 +1,14 @@
 <script setup>
 import { useLayoutStore } from '@/stores/layoutStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useTenantStore } from '@/stores/tenantStore';
 import AppSettings from './AppSettings.vue';
-import { ref, computed } from 'vue';
+import TenantSwitcher from '@/components/TenantSwitcher.vue';
+import { ref, computed, onMounted } from 'vue';
 
 const layoutStore = useLayoutStore();
 const authStore = useAuthStore();
+const tenantStore = useTenantStore();
 
 const settingsRef = ref(null);
 
@@ -13,12 +16,20 @@ const settingsRef = ref(null);
 const isAuthenticated = computed(() => authStore.isAuthenticated);
 const user = computed(() => authStore.user);
 
+onMounted(async () => {
+    // Fetch user's tenants if authenticated
+    if (isAuthenticated.value) {
+        await tenantStore.fetchUserTenants();
+    }
+});
+
 function showSettings() {
     settingsRef.value?.showSettings();
 }
 
 async function handleLogout() {
     await authStore.logout();
+    tenantStore.clearTenantData();
     window.location.href = '/auth/login';
 }
 
@@ -52,11 +63,16 @@ function handleLogin() {
                     </g>
                 </svg>
 
-                <span>V3Trading</span>
+                <span>DBWiki</span>
             </router-link>
         </div>
 
         <div class="layout-topbar-actions">
+            <!-- Tenant Switcher (only shown when authenticated) -->
+            <div v-if="isAuthenticated" class="mr-3">
+                <TenantSwitcher />
+            </div>
+
             <div class="layout-config-menu">
                 <button
                     @click="showSettings"

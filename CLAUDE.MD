@@ -1,8 +1,7 @@
-# V3Trading Project - Overview
+# DBWiki Project - Overview
 
 ## Project Overview
-V3Trading is a full-stack trading application with a Vue 3 frontend and FastAPI backend, featuring Google OAuth authentication and a mock trading API.
-
+DBWiki is a full-stack wiki cms with a Vue 3 frontend and FastAPI backend, featuring Google OAuth authentication
 ## Technology Stack
 
 ### Frontend
@@ -19,7 +18,9 @@ V3Trading is a full-stack trading application with a Vue 3 frontend and FastAPI 
 ### Backend
 - **Framework**: FastAPI
 - **Language**: Python
-- **Authentication**: OAuth2 (Google) with JWT
+- **Database**: PostgreSQL with SQLAlchemy 2.0, Alembic migrations
+- **Authentication**: Email/password (bcrypt) + Google OAuth with JWT cookies
+- **Multi-tenancy**: User-Tenant-Role junction table, tenant context via X-Tenant-Id header
 - **Session Management**: Starlette SessionMiddleware
 - **Port**: 8000
 
@@ -68,47 +69,43 @@ docker compose up -d
 - dont verify that build works, i will do it myself
 
 ### ✅ Implemented
-- Google OAuth authentication with JWT
-- PrimeVue UI framework with dynamic theming
-- Responsive dashboard with widgets and charts
-- Mock trading API (trades, positions, CRUD operations)
-- Docker containerization
-- GitHub Actions CI/CD pipeline
-- Nginx reverse proxy with rate limiting
+- **Authentication**: Email/password registration + Google OAuth, JWT httpOnly cookies, email verification, password reset
+- **Multi-tenant Architecture**: Users belong to multiple tenants with different roles per tenant, tenant switcher in UI
+- **Database**: PostgreSQL with Alembic migrations, Tenant/Role/User/UserTenantRole models
+- **Authorization**: Role-based + permission-based per tenant context via `require_role_in_tenant()` and `require_permission_in_tenant()`
+- **Frontend**: PrimeVue UI with dynamic theming, Pinia stores (authStore, tenantStore, layoutStore), axios interceptor for tenant context
+- **API**: Complete CRUD for users, tenants, roles, tenant membership management
+- Docker containerization, Nginx reverse proxy
 
-### 🚧 In Progress / Planned
-- Database persistence (currently in-memory)
-- Real trading API integration
-- WebSocket for real-time updates
-- Router TypeScript migration
-- Production UI kit cleanup
 
 ## Project Structure
 
 ```
-v3trading/
-├── backend/          # FastAPI application
+dbwiki/
+├── backend/
+│   ├── alembic/          # Database migrations
 │   ├── app/
-│   │   ├── routers/      # API endpoints
-│   │   ├── models/       # Pydantic models
-│   │   ├── utils/        # Utilities, mock data
-│   │   └── dependencies/ # Auth dependencies
+│   │   ├── crud/         # Database operations (users, tenants, roles, user_tenant_roles)
+│   │   ├── models/       # Pydantic (user.py) + SQLAlchemy (db_models.py) models
+│   │   ├── routers/      # API endpoints (auth.py, tenants.py)
+│   │   ├── utils/        # Password hashing, JWT auth
+│   │   └── dependencies/ # Auth context (get_current_user, require_role_in_tenant)
+│   ├── database.py       # SQLAlchemy engine + session
 │   └── main.py
 │
-├── frontend/         # Vue 3 application
+├── frontend/
 │   ├── src/
-│   │   ├── layout/       # App layout components
-│   │   ├── components/   # Reusable components
-│   │   ├── views/        # Page components
-│   │   ├── stores/       # Pinia state management
-│   │   ├── services/     # API service layer
-│   │   ├── router/       # Vue Router config
-│   │   └── types/        # TypeScript types
+│   │   ├── components/   # TenantSwitcher.vue
+│   │   ├── config/       # axios.ts (X-Tenant-Id interceptor)
+│   │   ├── layout/       # AppTopbar, AppSettings
+│   │   ├── services/     # authService, tenantService
+│   │   ├── stores/       # authStore, tenantStore, layoutStore
+│   │   ├── types/        # TypeScript interfaces
+│   │   └── views/        # Login, Register pages
 │   └── vite.config.ts
 │
-├── docs/             # Detailed documentation
-├── nginx/            # Nginx configuration
-└── docker-compose.yml
+├── docker-compose.yml    # PostgreSQL + app containers
+└── .env                  # DATABASE_URL, JWT_SECRET_KEY, GOOGLE_CLIENT_ID/SECRET
 ```
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for complete structure details.
@@ -117,12 +114,13 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for complete structure details.
 
 ### Backend Environment Variables
 ```env
+DATABASE_URL=postgresql+psycopg://user@localhost:5432/dbwiki
 GOOGLE_CLIENT_ID=<your-client-id>
 GOOGLE_CLIENT_SECRET=<your-client-secret>
 JWT_SECRET_KEY=<min-32-character-secret>
 JWT_ALGORITHM=HS256
-FRONTEND_URL=http://localhost:5174
-CORS_ORIGINS=http://localhost:5174
+FRONTEND_URL=http://localhost:5173
+CORS_ORIGINS=http://localhost:5173
 ```
 
 ### Google OAuth Setup
@@ -155,10 +153,11 @@ See [DEPLOYMENT.md](docs/DEPLOYMENT.md) and [RELEASES.md](docs/RELEASES.md) for 
 
 ### Code Standards
 - **Frontend**: Vue 3 Composition API, TypeScript, PrimeVue patterns
-- **Backend**: FastAPI best practices, Pydantic validation, type hints
-- **State**: Pinia stores for state management (layoutStore, authStore, tradingStore)
+- **Backend**: FastAPI best practices, Pydantic validation, type hints, SQLAlchemy 2.0 patterns
+- **State**: Pinia stores (authStore, tenantStore, layoutStore) with localStorage persistence
+- **Multi-tenant**: Always use tenant context via `X-Tenant-Id` header, `require_role_in_tenant()` for auth
 - **Styling**: Tailwind CSS + PrimeVue theming
-- **Preferences**: Managed by layoutStore with automatic localStorage persistence
+- **Migrations**: Use Alembic for schema changes (`alembic revision -m "description"`)
 
 ### Git Workflow
 - `master`: Production-ready code
@@ -179,18 +178,24 @@ See [DEPLOYMENT.md](docs/DEPLOYMENT.md) and [RELEASES.md](docs/RELEASES.md) for 
 
 **Backend won't start**
 - Check port 8000: `lsof -ti:8000`
-- Verify `.env` file exists
+- Verify `.env` file exists with DATABASE_URL
 - Check dependencies: `pip install -r requirements.txt`
+- Run migrations: `alembic upgrade head`
+
+**Database issues**
+- Ensure PostgreSQL running: `psql -U user -d dbwiki`
+- Check migration status: `alembic current`
+- View migration history: `alembic history`
+
+**Authentication errors**
+- Verify JWT_SECRET_KEY in `.env` (32+ chars)
+- Check cookies in browser DevTools
+- For multi-tenant: Ensure X-Tenant-Id header sent
 
 **Frontend won't connect**
-- Verify backend running on port 8000
-- Check proxy in `vite.config.ts`
+- Verify backend on port 8000, frontend on 5173
+- Check axios interceptor loaded in main.ts
 - Verify CORS in `backend/main.py`
-
-**OAuth not working**
-- Verify credentials in `.env`
-- Check redirect URIs match exactly
-- Clear browser cookies
 
 See [DEVELOPMENT.md](docs/DEVELOPMENT.md#troubleshooting) for more details.
 

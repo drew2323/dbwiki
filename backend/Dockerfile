@@ -40,5 +40,25 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
 
-# Run uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Create startup script
+COPY --chown=appuser:appuser <<'EOF' /app/start.sh
+#!/bin/bash
+set -e
+
+echo "Waiting for PostgreSQL to be ready..."
+until python -c "from app.database import get_engine; get_engine().connect()" 2>/dev/null; do
+  echo "PostgreSQL is unavailable - sleeping"
+  sleep 2
+done
+
+echo "PostgreSQL is up - running migrations"
+alembic upgrade head
+
+echo "Starting application"
+exec uvicorn main:app --host 0.0.0.0 --port 8000
+EOF
+
+RUN chmod +x /app/start.sh
+
+# Run startup script
+CMD ["/app/start.sh"]

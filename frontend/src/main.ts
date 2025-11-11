@@ -11,6 +11,7 @@ import ToastService from 'primevue/toastservice'
 import StyleClass from 'primevue/styleclass'
 
 import '@/assets/styles.scss'
+import '@/config/axios' // Import axios interceptor configuration
 import { useLayoutStore } from '@/stores/layoutStore'
 
 const app = createApp(App)

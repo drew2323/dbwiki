@@ -8,9 +8,9 @@ from dotenv import load_dotenv
 # (routers may read env vars at module level)
 load_dotenv()
 
-from app.routers import trades, positions, auth
+from app.routers import trades, positions, auth, tenants
 
-app = FastAPI(title="V3Trading API", version="0.1.0")
+app = FastAPI(title="DBWIKI API", version="0.1.0")
 
 # Add session middleware (required for OAuth)
 app.add_middleware(
@@ -31,12 +31,13 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router)
+app.include_router(tenants.router)
 app.include_router(trades.router)
 app.include_router(positions.router)
 
 @app.get("/")
 async def root():
-    return {"message": "V3Trading API", "version": "0.1.0"}
+    return {"message": "DBWIKI API", "version": "0.1.0"}
 
 @app.get("/health")
 async def health():
