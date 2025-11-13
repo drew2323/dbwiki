@@ -110,6 +110,11 @@ const router = createRouter({
                     path: '/documentation',
                     name: 'documentation',
                     component: () => import('@/views/pages/Documentation.vue')
+                },
+                {
+                    path: '/admin/users',
+                    name: 'user-management',
+                    component: () => import('@/views/admin/UserManagement.vue')
                 }
             ]
         },

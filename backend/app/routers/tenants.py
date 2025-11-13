@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.database import get_db
 from app.dependencies.auth import get_current_user
@@ -19,33 +19,32 @@ router = APIRouter(prefix="/api/tenants", tags=["tenants"])
 
 # Pydantic models for request/response
 class TenantResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     subdomain: str | None
     is_active: bool
-
-    class Config:
-        from_attributes = True
+    created_at: datetime
+    updated_at: datetime | None = None
 
 
 class RoleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     permissions: dict
 
-    class Config:
-        from_attributes = True
-
 
 class UserTenantResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     tenant: TenantResponse
     role: RoleResponse
     is_active: bool
     created_at: datetime
     expires_at: datetime | None
-
-    class Config:
-        from_attributes = True
 
 
 class AddUserToTenantRequest(BaseModel):
@@ -291,3 +290,120 @@ async def get_tenant_users(
             })
 
     return result
+
+
+# Tenant CRUD endpoints
+@router.get("", response_model=List[TenantResponse])
+async def list_all_tenants(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all tenants in the system.
+    """
+    tenants = tenant_crud.get_all_tenants(db, skip=skip, limit=limit)
+    return tenants
+
+
+@router.get("/{tenant_id}", response_model=TenantResponse)
+async def get_tenant(
+    tenant_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get a specific tenant by ID"""
+    tenant = tenant_crud.get_tenant_by_id(db, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return tenant
+
+
+class CreateTenantRequest(BaseModel):
+    name: str
+    subdomain: str | None = None
+
+
+@router.post("", response_model=TenantResponse)
+async def create_tenant(
+    data: CreateTenantRequest,
+    db: Session = Depends(get_db)
+):
+    """Create a new tenant"""
+    # Check if subdomain already exists
+    if data.subdomain:
+        existing = tenant_crud.get_tenant_by_subdomain(db, data.subdomain)
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Subdomain '{data.subdomain}' is already taken"
+            )
+
+    tenant = tenant_crud.create_tenant(
+        db=db,
+        name=data.name,
+        subdomain=data.subdomain
+    )
+    return tenant
+
+
+class UpdateTenantRequest(BaseModel):
+    name: str | None = None
+    subdomain: str | None = None
+    is_active: bool | None = None
+
+
+@router.put("/{tenant_id}", response_model=TenantResponse)
+async def update_tenant(
+    tenant_id: str,
+    data: UpdateTenantRequest,
+    db: Session = Depends(get_db)
+):
+    """Update a tenant"""
+    tenant = tenant_crud.get_tenant_by_id(db, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    # Check if new subdomain conflicts
+    if data.subdomain and data.subdomain != tenant.subdomain:
+        existing = tenant_crud.get_tenant_by_subdomain(db, data.subdomain)
+        if existing and existing.id != tenant_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Subdomain '{data.subdomain}' is already taken"
+            )
+
+    # Update fields
+    if data.name:
+        tenant.name = data.name
+    if data.subdomain is not None:
+        tenant.subdomain = data.subdomain
+    if data.is_active is not None:
+        tenant.is_active = data.is_active
+
+    db.commit()
+    db.refresh(tenant)
+    return tenant
+
+
+@router.post("/{tenant_id}/deactivate")
+async def deactivate_tenant(
+    tenant_id: str,
+    db: Session = Depends(get_db)
+):
+    """Deactivate a tenant"""
+    tenant = tenant_crud.deactivate_tenant(db, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return {"message": "Tenant deactivated successfully"}
+
+
+@router.post("/{tenant_id}/activate")
+async def activate_tenant(
+    tenant_id: str,
+    db: Session = Depends(get_db)
+):
+    """Activate a tenant"""
+    tenant = tenant_crud.activate_tenant(db, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return {"message": "Tenant activated successfully"}

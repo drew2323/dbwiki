@@ -119,5 +119,78 @@ export const tenantService = {
       { withCredentials: true }
     )
     return response.data
+  },
+
+  // Tenant CRUD operations
+  /**
+   * Get all tenants in the system
+   */
+  getAllTenants: async (skip: number = 0, limit: number = 100): Promise<Tenant[]> => {
+    const response = await axios.get(`${API_URL}`, {
+      params: { skip, limit },
+      withCredentials: true
+    })
+    return response.data
+  },
+
+  /**
+   * Get a specific tenant by ID
+   */
+  getTenantById: async (tenantId: string): Promise<Tenant> => {
+    const response = await axios.get(`${API_URL}/${tenantId}`, {
+      withCredentials: true
+    })
+    return response.data
+  },
+
+  /**
+   * Create a new tenant
+   */
+  createTenant: async (name: string, subdomain?: string): Promise<Tenant> => {
+    const response = await axios.post(
+      `${API_URL}`,
+      { name, subdomain },
+      { withCredentials: true }
+    )
+    return response.data
+  },
+
+  /**
+   * Update a tenant
+   */
+  updateTenant: async (
+    tenantId: string,
+    data: { name?: string; subdomain?: string; is_active?: boolean }
+  ): Promise<Tenant> => {
+    const response = await axios.put(
+      `${API_URL}/${tenantId}`,
+      data,
+      { withCredentials: true }
+    )
+    return response.data
+  },
+
+  /**
+   * Deactivate a tenant
+   */
+  deactivateTenant: async (tenantId: string) => {
+    const response = await axios.post(
+      `${API_URL}/${tenantId}/deactivate`,
+      {},
+      { withCredentials: true }
+    )
+    return response.data
+  },
+
+  /**
+   * Activate a tenant
+   */
+  activateTenant: async (tenantId: string) => {
+    const response = await axios.post(
+      `${API_URL}/${tenantId}/activate`,
+      {},
+      { withCredentials: true }
+    )
+    return response.data
   }
 }

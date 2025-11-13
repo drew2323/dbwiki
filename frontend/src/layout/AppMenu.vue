@@ -66,6 +66,12 @@ const model = ref([
         ]
     },
     {
+        label: 'Administration',
+        items: [
+            { label: 'User Management', icon: 'pi pi-fw pi-users', to: '/admin/users' }
+        ]
+    },
+    {
         label: 'UI Components',
         items: [
             { label: 'Form Layout', icon: 'pi pi-fw pi-id-card', to: '/uikit/formlayout' },
