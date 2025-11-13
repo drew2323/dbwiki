@@ -46,10 +46,6 @@ class User(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     email = Column(String(255), unique=True, nullable=False, index=True)
     username = Column(String(100), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=True)
-
-    # OAuth fields
-    google_id = Column(String(255), unique=True, nullable=True, index=True)
 
     # Profile
     name = Column(String(255), nullable=True)
@@ -75,6 +71,7 @@ class User(Base):
     # Relationships
     default_tenant = relationship("Tenant", foreign_keys=[default_tenant_id])
     tenant_roles = relationship("UserTenantRole", back_populates="user", cascade="all, delete-orphan")
+    auth_identities = relationship("AuthIdentity", back_populates="user", cascade="all, delete-orphan")
 
 
 class UserTenantRole(Base):
@@ -110,6 +107,42 @@ class UserTenantRole(Base):
     # Ensure unique user-tenant combination
     __table_args__ = (
         UniqueConstraint('user_id', 'tenant_id', name='uq_user_tenant'),
+    )
+
+
+class AuthIdentity(Base):
+    """
+    Links users to authentication providers (password, Google, GitHub, OIDC, etc.).
+    Supports multiple identities per user for SSO and passwordless authentication.
+
+    Examples:
+        User A → password provider (email/password login)
+        User A → google provider (can also login with Google)
+        User B → github provider (GitHub login only)
+    """
+    __tablename__ = "auth_identities"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Provider type: 'password', 'google', 'github', 'oidc', etc.
+    provider = Column(Text, nullable=False)
+
+    # Provider-specific user identifier (e.g., Google sub, GitHub user ID, email for password)
+    provider_subject = Column(Text, nullable=False, index=True)
+
+    # Provider-specific metadata (tokens, claims, profile data, password hash, etc.)
+    provider_metadata = Column("metadata", JSON, default=dict, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    user = relationship("User", back_populates="auth_identities")
+
+    # Ensure unique provider + subject combination
+    __table_args__ = (
+        UniqueConstraint('provider', 'provider_subject', name='uq_provider_subject'),
     )
 
 

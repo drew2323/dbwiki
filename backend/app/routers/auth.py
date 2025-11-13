@@ -16,6 +16,7 @@ from app.database import get_db
 from app.crud import users as user_crud
 from app.crud import roles as role_crud
 from app.crud import tenants as tenant_crud
+from app.crud import auth_identities as auth_identity_crud
 from app.utils.auth import create_access_token
 from app.utils.password import verify_password, get_password_hash
 
@@ -49,6 +50,10 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     if user_crud.get_user_by_username(db, user_data.username):
         raise HTTPException(status_code=400, detail="Username already taken")
 
+    # Check if password identity already exists for this email
+    if auth_identity_crud.get_identity_by_provider_subject(db, "password", user_data.email):
+        raise HTTPException(status_code=400, detail="Email already registered")
+
     # Get default tenant and viewer role
     default_tenant = tenant_crud.get_default_tenant(db)
     if not default_tenant:
@@ -69,11 +74,19 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
         db=db,
         email=user_data.email,
         username=user_data.username,
-        password_hash=password_hash,
         default_tenant_id=default_tenant.id,
         role_id=viewer_role.id,
         name=user_data.name,
         is_verified=False
+    )
+
+    # Create password auth identity
+    auth_identity_crud.create_identity(
+        db=db,
+        user_id=user.id,
+        provider="password",
+        provider_subject=user_data.email,
+        metadata={"password_hash": password_hash}
     )
 
     # Update verification token
@@ -91,13 +104,19 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
 @router.post("/login")
 async def login(credentials: UserLogin, response: Response, db: Session = Depends(get_db)):
     """Login with email and password"""
-    # Get user by email
-    user = user_crud.get_user_by_email(db, credentials.email)
-    if not user or not user.password_hash:
+    # Get password identity
+    identity = auth_identity_crud.get_identity_by_provider_subject(db, "password", credentials.email)
+    if not identity:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    # Verify password
-    if not verify_password(credentials.password, user.password_hash):
+    # Get the user
+    user = user_crud.get_user_by_id(db, identity.user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    # Verify password from provider_metadata
+    password_hash = identity.provider_metadata.get("password_hash")
+    if not password_hash or not verify_password(credentials.password, password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # Check if user is active
@@ -133,7 +152,7 @@ async def login_google(request: Request):
 
 @router.get("/callback")
 async def auth_callback(request: Request, response: Response, db: Session = Depends(get_db)):
-    """Handle Google OAuth callback"""
+    """Handle Google OAuth callback with automatic account linking"""
     try:
         # Get the token from Google
         token = await oauth.google.authorize_access_token(request)
@@ -148,40 +167,54 @@ async def auth_callback(request: Request, response: Response, db: Session = Depe
         name = user_info.get('name')
         picture = user_info.get('picture')
 
-        # Try to find user by google_id or email
-        user = user_crud.get_user_by_google_id(db, google_id)
+        # Try to find existing Google identity
+        google_identity = auth_identity_crud.get_identity_by_provider_subject(db, "google", google_id)
 
-        if not user:
-            # Check if email exists (link accounts)
-            user = user_crud.get_user_by_email(db, email)
-            if user and not user.google_id:
-                # Link Google account to existing email account
-                from app.models.db_models import User as DBUser
-                db.query(DBUser).filter(DBUser.id == user.id).update({"google_id": google_id})
-                db.commit()
-                db.refresh(user)
-
-        if not user:
-            # Get default tenant and viewer role
-            default_tenant = tenant_crud.get_default_tenant(db)
-            viewer_role = role_crud.get_role_by_name(db, "Viewer", default_tenant.id)
-
-            # Create new user with Google OAuth
-            username = email.split('@')[0] + "_" + secrets.token_hex(4)
-            user = user_crud.create_user(
-                db=db,
-                email=email,
-                username=username,
-                google_id=google_id,
-                name=name,
-                picture=picture,
-                default_tenant_id=default_tenant.id,
-                role_id=viewer_role.id,
-                is_verified=True  # OAuth users are auto-verified
-            )
+        if google_identity:
+            # User already has a Google identity
+            user = user_crud.get_user_by_id(db, google_identity.user_id)
         else:
-            # Update last login
-            user_crud.update_user_last_login(db, user.id)
+            # Check if user exists by email (account linking)
+            user = user_crud.get_user_by_email(db, email)
+
+            if user:
+                # Link Google identity to existing user account
+                auth_identity_crud.create_identity(
+                    db=db,
+                    user_id=user.id,
+                    provider="google",
+                    provider_subject=google_id,
+                    metadata={"email": email, "name": name, "picture": picture}
+                )
+                print(f"Linked Google account to existing user: {email}")
+            else:
+                # Create new user with Google OAuth
+                default_tenant = tenant_crud.get_default_tenant(db)
+                viewer_role = role_crud.get_role_by_name(db, "Viewer", default_tenant.id)
+
+                username = email.split('@')[0] + "_" + secrets.token_hex(4)
+                user = user_crud.create_user(
+                    db=db,
+                    email=email,
+                    username=username,
+                    name=name,
+                    picture=picture,
+                    default_tenant_id=default_tenant.id,
+                    role_id=viewer_role.id,
+                    is_verified=True  # OAuth users are auto-verified
+                )
+
+                # Create Google identity
+                auth_identity_crud.create_identity(
+                    db=db,
+                    user_id=user.id,
+                    provider="google",
+                    provider_subject=google_id,
+                    metadata={"email": email, "name": name, "picture": picture}
+                )
+
+        # Update last login
+        user_crud.update_user_last_login(db, user.id)
 
         # Create JWT token
         access_token = create_access_token(data={"sub": user.id, "email": user.email})
