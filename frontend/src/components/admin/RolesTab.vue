@@ -69,19 +69,26 @@
     </DataTable>
 
     <!-- Role Dialog -->
-    <Dialog v-model:visible="roleDialog" :style="{ width: '550px' }" :header="isEditMode ? 'Edit Role' : 'New Role'" :modal="true" class="p-fluid">
-      <div class="field">
-        <label for="name" class="font-medium">Role Name *</label>
-        <InputText id="name" v-model="currentRole.name" required />
-      </div>
-      <div class="field">
-        <label for="tenant" class="font-medium">Tenant *</label>
-        <Select id="tenant" v-model="currentRole.tenant_id" :options="tenantOptions" optionLabel="name" optionValue="id" placeholder="Select a tenant" :disabled="isEditMode" />
-      </div>
-      <div class="field">
-        <label class="font-medium">Permissions</label>
-        <Textarea v-model="currentRole.permissionsJson" rows="8" placeholder='{"read": true, "write": true, "delete": false}' />
-        <small class="text-surface-500">JSON format: key-value pairs of permission names and boolean values</small>
+    <Dialog v-model:visible="roleDialog" :style="{ width: '600px' }" :header="isEditMode ? 'Edit Role' : 'New Role'" :modal="true" class="p-fluid">
+      <div class="flex flex-col gap-4">
+        <FloatLabel>
+          <IconField>
+            <InputIcon class="pi pi-shield" />
+            <InputText id="name" v-model="currentRole.name" required class="w-full" :invalid="!currentRole.name" />
+          </IconField>
+          <label for="name">Role Name *</label>
+        </FloatLabel>
+
+        <FloatLabel>
+          <Select id="tenant" v-model="currentRole.tenant_id" :options="tenantOptions" optionLabel="name" optionValue="id" :disabled="isEditMode" class="w-full" :invalid="!currentRole.tenant_id" />
+          <label for="tenant">Tenant *</label>
+        </FloatLabel>
+
+        <FloatLabel>
+          <Textarea id="permissions" v-model="currentRole.permissionsJson" rows="8" class="w-full" />
+          <label for="permissions">Permissions (JSON)</label>
+        </FloatLabel>
+        <small class="text-surface-500 -mt-3">JSON format: key-value pairs of permission names and boolean values (e.g., {"read": true, "write": true})</small>
       </div>
 
       <template #footer>
@@ -134,6 +141,9 @@ import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
 import Select from 'primevue/select'
+import IconField from 'primevue/iconfield'
+import InputIcon from 'primevue/inputicon'
+import FloatLabel from 'primevue/floatlabel'
 import Chip from 'primevue/chip'
 import Tooltip from 'primevue/tooltip'
 

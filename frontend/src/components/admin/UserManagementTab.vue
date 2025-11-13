@@ -99,18 +99,28 @@
     </DataTable>
 
     <!-- User Edit Dialog -->
-    <Dialog v-model:visible="userDialog" :style="{ width: '450px' }" header="User Details" :modal="true" class="p-fluid">
-      <div class="field">
-        <label for="name">Name</label>
-        <InputText id="name" v-model="currentUser.name" />
-      </div>
-      <div class="field">
-        <label for="email" class="font-medium">Email</label>
-        <InputText id="email" v-model="currentUser.email" required />
-      </div>
-      <div class="field">
-        <label for="username" class="font-medium">Username</label>
-        <InputText id="username" v-model="currentUser.username" required />
+    <Dialog v-model:visible="userDialog" :style="{ width: '500px' }" header="User Details" :modal="true" class="p-fluid">
+      <div class="flex flex-col gap-4">
+        <FloatLabel>
+          <InputText id="name" v-model="currentUser.name" class="w-full" />
+          <label for="name">Name</label>
+        </FloatLabel>
+
+        <FloatLabel>
+          <IconField>
+            <InputIcon class="pi pi-envelope" />
+            <InputText id="email" v-model="currentUser.email" required class="w-full" :invalid="!currentUser.email" />
+          </IconField>
+          <label for="email">Email *</label>
+        </FloatLabel>
+
+        <FloatLabel>
+          <IconField>
+            <InputIcon class="pi pi-user" />
+            <InputText id="username" v-model="currentUser.username" required class="w-full" :invalid="!currentUser.username" />
+          </IconField>
+          <label for="username">Username *</label>
+        </FloatLabel>
       </div>
 
       <template #footer>
@@ -152,6 +162,7 @@ import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
+import FloatLabel from 'primevue/floatlabel'
 import Tag from 'primevue/tag'
 import Avatar from 'primevue/avatar'
 import Tooltip from 'primevue/tooltip'

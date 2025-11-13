@@ -65,18 +65,44 @@
     </DataTable>
 
     <!-- Association Dialog -->
-    <Dialog v-model:visible="associationDialog" :style="{ width: '500px' }" :header="isEditMode ? 'Edit Association' : 'New Association'" :modal="true" class="p-fluid">
-      <div class="field">
-        <label for="user" class="font-medium">User *</label>
-        <Select id="user" v-model="currentAssociation.user_id" :options="userStore.users" optionLabel="email" optionValue="id" placeholder="Select a user" filter :disabled="isEditMode" />
-      </div>
-      <div class="field">
-        <label for="tenant" class="font-medium">Tenant *</label>
-        <Select id="tenant" v-model="currentAssociation.tenant_id" :options="tenantOptions" optionLabel="name" optionValue="id" placeholder="Select a tenant" :disabled="isEditMode" @change="onTenantChange" />
-      </div>
-      <div class="field">
-        <label for="role" class="font-medium">Role *</label>
-        <Select id="role" v-model="currentAssociation.role_id" :options="filteredRoles" optionLabel="name" optionValue="id" placeholder="Select a role" :disabled="!currentAssociation.tenant_id" />
+    <Dialog v-model:visible="associationDialog" :style="{ width: '550px' }" :header="isEditMode ? 'Edit Association' : 'New Association'" :modal="true" class="p-fluid">
+      <div class="flex flex-col gap-4">
+        <FloatLabel>
+          <Select id="user" v-model="currentAssociation.user_id" :options="userStore.users" optionLabel="email" optionValue="id" filter :disabled="isEditMode" class="w-full" :invalid="!currentAssociation.user_id">
+            <template #value="slotProps">
+              <div v-if="slotProps.value" class="flex items-center gap-2">
+                <i class="pi pi-user"></i>
+                <span>{{ userStore.users.find(u => u.id === slotProps.value)?.email }}</span>
+              </div>
+            </template>
+          </Select>
+          <label for="user">User *</label>
+        </FloatLabel>
+
+        <FloatLabel>
+          <Select id="tenant" v-model="currentAssociation.tenant_id" :options="tenantOptions" optionLabel="name" optionValue="id" :disabled="isEditMode" @change="onTenantChange" class="w-full" :invalid="!currentAssociation.tenant_id">
+            <template #value="slotProps">
+              <div v-if="slotProps.value" class="flex items-center gap-2">
+                <i class="pi pi-building"></i>
+                <span>{{ tenantOptions.find(t => t.id === slotProps.value)?.name }}</span>
+              </div>
+            </template>
+          </Select>
+          <label for="tenant">Tenant *</label>
+        </FloatLabel>
+
+        <FloatLabel>
+          <Select id="role" v-model="currentAssociation.role_id" :options="filteredRoles" optionLabel="name" optionValue="id" :disabled="!currentAssociation.tenant_id" class="w-full" :invalid="!currentAssociation.role_id">
+            <template #value="slotProps">
+              <div v-if="slotProps.value" class="flex items-center gap-2">
+                <i class="pi pi-shield"></i>
+                <span>{{ filteredRoles.find(r => r.id === slotProps.value)?.name }}</span>
+              </div>
+            </template>
+          </Select>
+          <label for="role">Role *</label>
+        </FloatLabel>
+        <small v-if="!currentAssociation.tenant_id" class="text-surface-500 -mt-3">Please select a tenant first to see available roles</small>
       </div>
 
       <template #footer>
@@ -114,6 +140,7 @@ import Toolbar from 'primevue/toolbar'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
+import FloatLabel from 'primevue/floatlabel'
 import Tag from 'primevue/tag'
 import Chip from 'primevue/chip'
 import Tooltip from 'primevue/tooltip'

@@ -67,14 +67,23 @@
     </DataTable>
 
     <!-- Tenant Dialog -->
-    <Dialog v-model:visible="tenantDialog" :style="{ width: '450px' }" :header="isEditMode ? 'Edit Tenant' : 'New Tenant'" :modal="true" class="p-fluid">
-      <div class="field">
-        <label for="name" class="font-medium">Tenant Name *</label>
-        <InputText id="name" v-model="currentTenant.name" required />
-      </div>
-      <div class="field">
-        <label for="subdomain" class="font-medium">Subdomain</label>
-        <InputText id="subdomain" v-model="currentTenant.subdomain" placeholder="Optional unique subdomain" />
+    <Dialog v-model:visible="tenantDialog" :style="{ width: '500px' }" :header="isEditMode ? 'Edit Tenant' : 'New Tenant'" :modal="true" class="p-fluid">
+      <div class="flex flex-col gap-4">
+        <FloatLabel>
+          <IconField>
+            <InputIcon class="pi pi-building" />
+            <InputText id="name" v-model="currentTenant.name" required class="w-full" :invalid="!currentTenant.name" />
+          </IconField>
+          <label for="name">Tenant Name *</label>
+        </FloatLabel>
+
+        <FloatLabel>
+          <IconField>
+            <InputIcon class="pi pi-link" />
+            <InputText id="subdomain" v-model="currentTenant.subdomain" class="w-full" />
+          </IconField>
+          <label for="subdomain">Subdomain</label>
+        </FloatLabel>
       </div>
 
       <template #footer>
@@ -97,6 +106,9 @@ import Toolbar from 'primevue/toolbar'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
+import IconField from 'primevue/iconfield'
+import InputIcon from 'primevue/inputicon'
+import FloatLabel from 'primevue/floatlabel'
 import Tag from 'primevue/tag'
 import Tooltip from 'primevue/tooltip'
 

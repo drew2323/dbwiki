@@ -132,27 +132,40 @@
     </div>
 
     <!-- Add Identity Dialog -->
-    <Dialog v-model:visible="addIdentityDialog" :style="{ width: '450px' }" header="Add Authentication Identity" :modal="true" class="p-fluid">
-      <div class="field">
-        <label for="provider" class="font-medium">Provider *</label>
-        <Select id="provider" v-model="newIdentity.provider" :options="authIdentityStore.availableProviders" optionLabel="label" optionValue="name" placeholder="Select a provider">
-          <template #option="{ option }">
-            <div class="flex items-center gap-2">
-              <i :class="`pi ${option.icon}`"></i>
-              <span>{{ option.label }}</span>
-            </div>
-          </template>
-        </Select>
-      </div>
-      <div class="field">
-        <label for="subject" class="font-medium">Provider Subject *</label>
-        <InputText id="subject" v-model="newIdentity.provider_subject" placeholder="e.g., email for password, sub for OAuth" />
-        <small class="text-surface-500">The unique identifier for this user in the provider system</small>
-      </div>
-      <div class="field">
-        <label for="metadata" class="font-medium">Metadata (JSON)</label>
-        <Textarea id="metadata" v-model="newIdentity.metadataJson" rows="5" placeholder='{"key": "value"}' />
-        <small class="text-surface-500">Optional additional data (excluding sensitive info)</small>
+    <Dialog v-model:visible="addIdentityDialog" :style="{ width: '550px' }" header="Add Authentication Identity" :modal="true" class="p-fluid">
+      <div class="flex flex-col gap-4">
+        <FloatLabel>
+          <Select id="provider" v-model="newIdentity.provider" :options="authIdentityStore.availableProviders" optionLabel="label" optionValue="name" class="w-full" :invalid="!newIdentity.provider">
+            <template #value="slotProps">
+              <div v-if="slotProps.value" class="flex items-center gap-2">
+                <i :class="`pi ${authIdentityStore.availableProviders.find(p => p.name === slotProps.value)?.icon}`"></i>
+                <span>{{ authIdentityStore.availableProviders.find(p => p.name === slotProps.value)?.label }}</span>
+              </div>
+            </template>
+            <template #option="{ option }">
+              <div class="flex items-center gap-2">
+                <i :class="`pi ${option.icon}`"></i>
+                <span>{{ option.label }}</span>
+              </div>
+            </template>
+          </Select>
+          <label for="provider">Provider *</label>
+        </FloatLabel>
+
+        <FloatLabel>
+          <IconField>
+            <InputIcon class="pi pi-id-card" />
+            <InputText id="subject" v-model="newIdentity.provider_subject" class="w-full" :invalid="!newIdentity.provider_subject" />
+          </IconField>
+          <label for="subject">Provider Subject *</label>
+        </FloatLabel>
+        <small class="text-surface-500 -mt-3">The unique identifier for this user in the provider system (e.g., email for password, sub for OAuth)</small>
+
+        <FloatLabel>
+          <Textarea id="metadata" v-model="newIdentity.metadataJson" rows="5" class="w-full" />
+          <label for="metadata">Metadata (JSON)</label>
+        </FloatLabel>
+        <small class="text-surface-500 -mt-3">Optional additional data (excluding sensitive info like passwords or tokens)</small>
       </div>
 
       <template #footer>
@@ -196,6 +209,7 @@ import Textarea from 'primevue/textarea'
 import Select from 'primevue/select'
 import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
+import FloatLabel from 'primevue/floatlabel'
 import Avatar from 'primevue/avatar'
 import Badge from 'primevue/badge'
 import Chip from 'primevue/chip'
