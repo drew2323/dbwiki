@@ -128,3 +128,22 @@ def activate_user(db: Session, user_id: str) -> Optional[User]:
         db.commit()
         db.refresh(user)
     return user
+
+def delete_user(db: Session, user_id: str) -> bool:
+    """
+    Permanently delete a user and all associated data via CASCADE.
+
+    This will automatically delete (via database CASCADE):
+    - All auth_identities (passwords, OAuth connections)
+    - All user_tenant_roles (tenant memberships)
+    - All user_sessions (active sessions)
+
+    Returns:
+        bool: True if user was found and deleted, False if user not found
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if user:
+        db.delete(user)
+        db.commit()
+        return True
+    return False

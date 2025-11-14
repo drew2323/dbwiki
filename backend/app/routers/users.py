@@ -108,11 +108,17 @@ async def deactivate_user(user_id: str, db: Session = Depends(get_db)):
 @router.delete("/{user_id}")
 async def delete_user(user_id: str, db: Session = Depends(get_db)):
     """
-    Delete a user (soft delete by deactivating).
-    Note: This performs a soft delete by deactivating the user.
-    Hard deletes should be done carefully due to foreign key constraints.
+    Permanently delete a user and all associated data.
+
+    This will CASCADE delete:
+    - All auth identities (passwords, OAuth connections)
+    - All tenant memberships (user_tenant_roles)
+    - All user sessions
+
+    Note: This is a destructive operation and cannot be undone.
+    Use the deactivate endpoint for soft deletion.
     """
-    user = user_crud.deactivate_user(db, user_id)
-    if not user:
+    success = user_crud.delete_user(db, user_id)
+    if not success:
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "User deleted successfully"}

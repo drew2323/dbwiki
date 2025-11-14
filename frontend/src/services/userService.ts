@@ -52,7 +52,8 @@ export const userService = {
   },
 
   /**
-   * Delete a user (soft delete)
+   * Permanently delete a user and all associated data (CASCADE delete)
+   * Note: This is a destructive operation and cannot be undone
    */
   async deleteUser(userId: string): Promise<void> {
     await api.delete(`/users/${userId}`)
