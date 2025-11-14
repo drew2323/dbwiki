@@ -42,8 +42,8 @@
     <Card>
       <template #title>Profile Information</template>
       <template #content>
-        <div class="flex flex-col gap-4">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="flex flex-col gap-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
             <FloatLabel>
               <InputText id="name" v-model="editableUser.name" class="w-full" />
               <label for="name">Full Name</label>
@@ -56,10 +56,7 @@
           </div>
 
           <FloatLabel>
-            <IconField>
-              <InputIcon class="pi pi-envelope" />
-              <InputText id="email" v-model="editableUser.email" class="w-full" required type="email" />
-            </IconField>
+            <InputText id="email" v-model="editableUser.email" class="w-full" required type="email" />
             <label for="email">Email *</label>
           </FloatLabel>
 

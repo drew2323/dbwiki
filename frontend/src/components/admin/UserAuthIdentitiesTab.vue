@@ -67,8 +67,8 @@
 
     <!-- Add Identity Dialog -->
     <Dialog v-model:visible="addDialog" :style="{ width: '550px' }" header="Add Authentication Identity" :modal="true" class="p-fluid">
-      <div class="flex flex-col gap-4">
-        <FloatLabel>
+      <div class="flex flex-col gap-6">
+        <FloatLabel class="mt-2">
           <Select
             id="provider"
             v-model="newIdentity.provider"
@@ -94,20 +94,21 @@
           <label for="provider">Provider *</label>
         </FloatLabel>
 
-        <FloatLabel>
-          <IconField>
-            <InputIcon class="pi pi-id-card" />
+        <div class="flex flex-col gap-2">
+          <FloatLabel>
             <InputText id="subject" v-model="newIdentity.provider_subject" class="w-full" :invalid="!newIdentity.provider_subject" />
-          </IconField>
-          <label for="subject">Provider Subject *</label>
-        </FloatLabel>
-        <small class="text-surface-500 -mt-3">The unique identifier for this user in the provider system</small>
+            <label for="subject">Provider Subject *</label>
+          </FloatLabel>
+          <small class="text-surface-500">The unique identifier for this user in the provider system</small>
+        </div>
 
-        <FloatLabel>
-          <Textarea id="metadata" v-model="newIdentity.metadataJson" rows="5" class="w-full" />
-          <label for="metadata">Metadata (JSON)</label>
-        </FloatLabel>
-        <small class="text-surface-500 -mt-3">Optional additional data (excluding sensitive info)</small>
+        <div class="flex flex-col gap-2">
+          <FloatLabel>
+            <Textarea id="metadata" v-model="newIdentity.metadataJson" rows="5" class="w-full" />
+            <label for="metadata">Metadata (JSON)</label>
+          </FloatLabel>
+          <small class="text-surface-500">Optional additional data (excluding sensitive info)</small>
+        </div>
       </div>
 
       <template #footer>

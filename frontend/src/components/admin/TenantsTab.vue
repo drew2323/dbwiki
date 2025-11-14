@@ -68,20 +68,14 @@
 
     <!-- Tenant Dialog -->
     <Dialog v-model:visible="tenantDialog" :style="{ width: '500px' }" :header="isEditMode ? 'Edit Tenant' : 'New Tenant'" :modal="true" class="p-fluid">
-      <div class="flex flex-col gap-4">
-        <FloatLabel>
-          <IconField>
-            <InputIcon class="pi pi-building" />
-            <InputText id="name" v-model="currentTenant.name" required class="w-full" :invalid="!currentTenant.name" />
-          </IconField>
+      <div class="flex flex-col gap-6">
+        <FloatLabel class="mt-6">
+          <InputText id="name" v-model="currentTenant.name" required class="w-full" :invalid="!currentTenant.name" />
           <label for="name">Tenant Name *</label>
         </FloatLabel>
 
         <FloatLabel>
-          <IconField>
-            <InputIcon class="pi pi-link" />
-            <InputText id="subdomain" v-model="currentTenant.subdomain" class="w-full" />
-          </IconField>
+          <InputText id="subdomain" v-model="currentTenant.subdomain" class="w-full" />
           <label for="subdomain">Subdomain</label>
         </FloatLabel>
       </div>

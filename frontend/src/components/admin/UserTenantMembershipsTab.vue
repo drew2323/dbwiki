@@ -71,8 +71,8 @@
 
     <!-- Add/Edit Membership Dialog -->
     <Dialog v-model:visible="membershipDialog" :style="{ width: '550px' }" :header="isEditMode ? 'Edit Membership' : 'Add Membership'" :modal="true" class="p-fluid">
-      <div class="flex flex-col gap-4">
-        <FloatLabel>
+      <div class="flex flex-col gap-6">
+        <FloatLabel class="mt-6">
           <Select
             id="tenant"
             v-model="currentMembership.tenant_id"
@@ -94,29 +94,31 @@
           <label for="tenant">Tenant *</label>
         </FloatLabel>
 
-        <FloatLabel>
-          <Select
-            id="role"
-            v-model="currentMembership.role_id"
-            :options="filteredRoles"
-            optionLabel="name"
-            optionValue="id"
-            :disabled="!currentMembership.tenant_id"
-            class="w-full"
-            :invalid="!currentMembership.role_id"
-          >
-            <template #value="slotProps">
-              <div v-if="slotProps.value" class="flex items-center gap-2">
-                <i class="pi pi-shield"></i>
-                <span>{{ filteredRoles.find(r => r.id === slotProps.value)?.name }}</span>
-              </div>
-            </template>
-          </Select>
-          <label for="role">Role *</label>
-        </FloatLabel>
-        <small v-if="!currentMembership.tenant_id" class="text-surface-500 -mt-3">
-          Please select a tenant first to see available roles
-        </small>
+        <div class="flex flex-col gap-2">
+          <FloatLabel>
+            <Select
+              id="role"
+              v-model="currentMembership.role_id"
+              :options="filteredRoles"
+              optionLabel="name"
+              optionValue="id"
+              :disabled="!currentMembership.tenant_id"
+              class="w-full"
+              :invalid="!currentMembership.role_id"
+            >
+              <template #value="slotProps">
+                <div v-if="slotProps.value" class="flex items-center gap-2">
+                  <i class="pi pi-shield"></i>
+                  <span>{{ filteredRoles.find(r => r.id === slotProps.value)?.name }}</span>
+                </div>
+              </template>
+            </Select>
+            <label for="role">Role *</label>
+          </FloatLabel>
+          <small v-if="!currentMembership.tenant_id" class="text-surface-500">
+            Please select a tenant first to see available roles
+          </small>
+        </div>
       </div>
 
       <template #footer>

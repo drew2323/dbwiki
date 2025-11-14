@@ -133,8 +133,8 @@
 
     <!-- Add Identity Dialog -->
     <Dialog v-model:visible="addIdentityDialog" :style="{ width: '550px' }" header="Add Authentication Identity" :modal="true" class="p-fluid">
-      <div class="flex flex-col gap-4">
-        <FloatLabel>
+      <div class="flex flex-col gap-6">
+        <FloatLabel class="mt-6">
           <Select id="provider" v-model="newIdentity.provider" :options="authIdentityStore.availableProviders" optionLabel="label" optionValue="name" class="w-full" :invalid="!newIdentity.provider">
             <template #value="slotProps">
               <div v-if="slotProps.value" class="flex items-center gap-2">
@@ -152,20 +152,21 @@
           <label for="provider">Provider *</label>
         </FloatLabel>
 
-        <FloatLabel>
-          <IconField>
-            <InputIcon class="pi pi-id-card" />
+        <div class="flex flex-col gap-2">
+          <FloatLabel>
             <InputText id="subject" v-model="newIdentity.provider_subject" class="w-full" :invalid="!newIdentity.provider_subject" />
-          </IconField>
-          <label for="subject">Provider Subject *</label>
-        </FloatLabel>
-        <small class="text-surface-500 -mt-3">The unique identifier for this user in the provider system (e.g., email for password, sub for OAuth)</small>
+            <label for="subject">Provider Subject *</label>
+          </FloatLabel>
+          <small class="text-surface-500">The unique identifier for this user in the provider system (e.g., email for password, sub for OAuth)</small>
+        </div>
 
-        <FloatLabel>
-          <Textarea id="metadata" v-model="newIdentity.metadataJson" rows="5" class="w-full" />
-          <label for="metadata">Metadata (JSON)</label>
-        </FloatLabel>
-        <small class="text-surface-500 -mt-3">Optional additional data (excluding sensitive info like passwords or tokens)</small>
+        <div class="flex flex-col gap-2">
+          <FloatLabel>
+            <Textarea id="metadata" v-model="newIdentity.metadataJson" rows="5" class="w-full" />
+            <label for="metadata">Metadata (JSON)</label>
+          </FloatLabel>
+          <small class="text-surface-500">Optional additional data (excluding sensitive info like passwords or tokens)</small>
+        </div>
       </div>
 
       <template #footer>
