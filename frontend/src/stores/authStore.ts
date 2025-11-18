@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authService } from '@/services/authService'
-import { useTenantStore } from './tenantStore'
+import { useSpaceStore } from './spaceStore'
 import type { User } from '@/types/auth'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -13,6 +13,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Computed
   const isAuthenticated = computed(() => user.value !== null)
+  const isSuperuser = computed(() => user.value?.is_superuser ?? false)
 
   // Actions
   const fetchUser = async () => {
@@ -51,9 +52,9 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       await authService.login(email, password)
       await fetchUser()
-      // Fetch user's tenants after successful login
-      const tenantStore = useTenantStore()
-      await tenantStore.fetchUserTenants()
+      // Fetch user's spaces after successful login
+      const spaceStore = useSpaceStore()
+      await spaceStore.fetchUserSpaces()
     } catch (err: any) {
       error.value = err.message || 'Failed to login'
       throw err
@@ -93,6 +94,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     // Computed
     isAuthenticated,
+    isSuperuser,
 
     // Actions
     fetchUser,

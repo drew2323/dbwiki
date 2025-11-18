@@ -1,18 +1,17 @@
 /**
  * Role Service
- * Handles API calls for role CRUD operations
+ * Handles API calls for global role CRUD operations.
+ * Roles are global entities (superuser, admin, edit, read) that can be assigned to users in different spaces.
  */
 import { api } from './api'
 import type { Role, CreateRole, UpdateRole } from '@/types/admin'
 
 export const roleService = {
   /**
-   * Get all roles, optionally filtered by tenant
+   * Get all global roles
    */
-  async getRoles(tenantId?: string): Promise<Role[]> {
-    const response = await api.get<Role[]>('/roles', {
-      params: tenantId ? { tenant_id: tenantId } : undefined
-    })
+  async getRoles(): Promise<Role[]> {
+    const response = await api.get<Role[]>('/roles')
     return response.data
   },
 

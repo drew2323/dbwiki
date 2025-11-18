@@ -21,11 +21,11 @@
       <TabPanel>
         <template #header>
           <div class="flex items-center gap-2">
-            <i class="pi pi-building"></i>
-            <span>Tenants</span>
+            <i class="pi pi-box"></i>
+            <span>Spaces</span>
           </div>
         </template>
-        <TenantsTab />
+        <SpacesTab />
       </TabPanel>
 
       <TabPanel>
@@ -42,11 +42,11 @@
         <template #header>
           <div class="flex items-center gap-2">
             <i class="pi pi-sitemap"></i>
-            <span class="hidden md:inline">User-Tenant-Roles</span>
+            <span class="hidden md:inline">User-Space-Roles</span>
             <span class="md:hidden">Associations</span>
           </div>
         </template>
-        <UserTenantRolesTab />
+        <UserSpaceMembershipsTab />
       </TabPanel>
     </TabView>
   </div>
@@ -64,9 +64,9 @@ import Tag from 'primevue/tag'
 
 // Tab Components
 import UserManagementTab from '@/components/admin/UserManagementTab.vue'
-import TenantsTab from '@/components/admin/TenantsTab.vue'
+import SpacesTab from '@/components/admin/SpacesTab.vue'
 import RolesTab from '@/components/admin/RolesTab.vue'
-import UserTenantRolesTab from '@/components/admin/UserTenantRolesTab.vue'
+import UserSpaceMembershipsTab from '@/components/admin/UserSpaceMembershipsTab.vue'
 
 const userStore = useUserStore()
 const roleStore = useRoleStore()
@@ -75,8 +75,8 @@ const activeIndex = ref(0)
 
 const tabDescriptions = computed(() => [
   { name: 'Users', count: `${userStore.userCount} users`, icon: 'pi-users' },
-  { name: 'Tenants', count: 'Manage tenants', icon: 'pi-building' },
+  { name: 'Spaces', count: 'Manage spaces', icon: 'pi-box' },
   { name: 'Roles', count: `${roleStore.roleCount} roles`, icon: 'pi-shield' },
-  { name: 'Associations', count: 'User-Tenant-Roles', icon: 'pi-sitemap' }
+  { name: 'Associations', count: 'User-Space-Roles', icon: 'pi-sitemap' }
 ])
 </script>

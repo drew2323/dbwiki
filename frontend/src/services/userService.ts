@@ -57,5 +57,22 @@ export const userService = {
    */
   async deleteUser(userId: string): Promise<void> {
     await api.delete(`/users/${userId}`)
+  },
+
+  /**
+   * Grant superuser privileges to a user
+   * Only superusers can perform this action
+   */
+  async grantSuperuser(userId: string): Promise<void> {
+    await api.post(`/users/${userId}/superuser`)
+  },
+
+  /**
+   * Revoke superuser privileges from a user
+   * Only superusers can perform this action
+   * Cannot revoke your own superuser status
+   */
+  async revokeSuperuser(userId: string): Promise<void> {
+    await api.delete(`/users/${userId}/superuser`)
   }
 }

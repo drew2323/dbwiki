@@ -1,13 +1,13 @@
 import axios from 'axios'
-import { useTenantStore } from '@/stores/tenantStore'
+import { useSpaceStore } from '@/stores/spaceStore'
 
-// Add request interceptor to include tenant context
+// Add request interceptor to include space context
 axios.interceptors.request.use(
   (config) => {
-    // Add tenant ID to headers if available
-    const tenantStore = useTenantStore()
-    if (tenantStore.currentTenantId) {
-      config.headers['X-Tenant-Id'] = tenantStore.currentTenantId
+    // Add space ID to headers if available
+    const spaceStore = useSpaceStore()
+    if (spaceStore.currentSpaceId) {
+      config.headers['X-Space-Id'] = spaceStore.currentSpaceId
     }
     return config
   },

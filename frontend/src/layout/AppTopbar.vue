@@ -1,14 +1,14 @@
 <script setup>
 import { useLayoutStore } from '@/stores/layoutStore';
 import { useAuthStore } from '@/stores/authStore';
-import { useTenantStore } from '@/stores/tenantStore';
+import { useSpaceStore } from '@/stores/spaceStore';
 import AppSettings from './AppSettings.vue';
-import TenantSwitcher from '@/components/TenantSwitcher.vue';
+import SpaceSwitcher from '@/components/SpaceSwitcher.vue';
 import { ref, computed, onMounted } from 'vue';
 
 const layoutStore = useLayoutStore();
 const authStore = useAuthStore();
-const tenantStore = useTenantStore();
+const spaceStore = useSpaceStore();
 
 const settingsRef = ref(null);
 
@@ -17,9 +17,9 @@ const isAuthenticated = computed(() => authStore.isAuthenticated);
 const user = computed(() => authStore.user);
 
 onMounted(async () => {
-    // Fetch user's tenants if authenticated
+    // Fetch user's spaces if authenticated
     if (isAuthenticated.value) {
-        await tenantStore.fetchUserTenants();
+        await spaceStore.fetchUserSpaces();
     }
 });
 
@@ -29,7 +29,7 @@ function showSettings() {
 
 async function handleLogout() {
     await authStore.logout();
-    tenantStore.clearTenantData();
+    spaceStore.clearSpaceData();
     window.location.href = '/auth/login';
 }
 
@@ -68,9 +68,9 @@ function handleLogin() {
         </div>
 
         <div class="layout-topbar-actions">
-            <!-- Tenant Switcher (only shown when authenticated) -->
+            <!-- Space Switcher (only shown when authenticated) -->
             <div v-if="isAuthenticated" class="mr-3">
-                <TenantSwitcher />
+                <SpaceSwitcher />
             </div>
 
             <div class="layout-config-menu">

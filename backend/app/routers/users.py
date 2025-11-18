@@ -9,6 +9,8 @@ from pydantic import BaseModel, EmailStr
 from app.database import get_db
 from app.crud import users as user_crud
 from app.models.user import UserResponse
+from app.dependencies.auth import require_superuser
+from app.models.db_models import User
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -22,17 +24,17 @@ class UserUpdate(BaseModel):
 
 @router.get("", response_model=List[UserResponse])
 async def list_users(
-    tenant_id: Optional[str] = Query(None),
+    space_id: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     search: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
-    List all users with optional filtering by tenant and search.
+    List all users with optional filtering by space and search.
     Supports pagination.
     """
-    users = user_crud.get_users(db, tenant_id=tenant_id, skip=skip, limit=limit)
+    users = user_crud.get_users(db, space_id=space_id, skip=skip, limit=limit)
 
     # Apply search filter if provided
     if search:
@@ -112,8 +114,7 @@ async def delete_user(user_id: str, db: Session = Depends(get_db)):
 
     This will CASCADE delete:
     - All auth identities (passwords, OAuth connections)
-    - All tenant memberships (user_tenant_roles)
-    - All user sessions
+    - All space memberships (user_space_roles)
 
     Note: This is a destructive operation and cannot be undone.
     Use the deactivate endpoint for soft deletion.
@@ -122,3 +123,67 @@ async def delete_user(user_id: str, db: Session = Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "User deleted successfully"}
+
+
+# Superuser management endpoints
+@router.post("/{user_id}/superuser")
+async def grant_superuser(
+    user_id: str,
+    current_user: User = Depends(require_superuser),
+    db: Session = Depends(get_db)
+):
+    """
+    Grant superuser status to a user.
+    Only superusers can grant superuser status.
+    """
+    user = user_crud.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.is_superuser:
+        raise HTTPException(status_code=400, detail="User is already a superuser")
+
+    user.is_superuser = True
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": f"User {user.username} is now a superuser",
+        "user_id": user.id,
+        "is_superuser": user.is_superuser
+    }
+
+
+@router.delete("/{user_id}/superuser")
+async def revoke_superuser(
+    user_id: str,
+    current_user: User = Depends(require_superuser),
+    db: Session = Depends(get_db)
+):
+    """
+    Revoke superuser status from a user.
+    Only superusers can revoke superuser status.
+    """
+    user = user_crud.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not user.is_superuser:
+        raise HTTPException(status_code=400, detail="User is not a superuser")
+
+    # Prevent removing superuser status from yourself
+    if user.id == current_user.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot revoke your own superuser status"
+        )
+
+    user.is_superuser = False
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": f"Superuser status revoked from {user.username}",
+        "user_id": user.id,
+        "is_superuser": user.is_superuser
+    }

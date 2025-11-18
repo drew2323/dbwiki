@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from app.models.db_models import User, Role, Tenant, UserTenantRole, AuthIdentity
+from app.models.db_models import User, Role, Space, UserSpaceRole, AuthIdentity
 from typing import Optional
 from datetime import datetime, timezone
 import uuid
@@ -25,15 +25,13 @@ def create_user(
     db: Session,
     email: str,
     username: str,
-    default_tenant_id: str,
-    role_id: str,
     name: Optional[str] = None,
     picture: Optional[str] = None,
     is_verified: bool = False
 ) -> User:
     """
-    Create a new user with a default tenant.
-    Also creates the UserTenantRole association automatically.
+    Create a new user.
+    Note: Space membership should be added separately using user_space_roles CRUD.
     Note: Auth identities should be created separately using auth_identities CRUD.
     """
     user_id = str(uuid.uuid4())
@@ -43,22 +41,10 @@ def create_user(
         username=username,
         name=name,
         picture=picture,
-        default_tenant_id=default_tenant_id,
         is_verified=is_verified,
         is_active=True
     )
     db.add(user)
-
-    # Create the UserTenantRole association
-    user_tenant_role = UserTenantRole(
-        id=str(uuid.uuid4()),
-        user_id=user_id,
-        tenant_id=default_tenant_id,
-        role_id=role_id,
-        is_active=True
-    )
-    db.add(user_tenant_role)
-
     db.commit()
     db.refresh(user)
     return user
@@ -107,10 +93,22 @@ def reset_password(db: Session, token: str, new_password_hash: str) -> Optional[
         db.refresh(user)
     return user
 
-def get_users(db: Session, tenant_id: Optional[str] = None, skip: int = 0, limit: int = 100):
+def get_users(db: Session, space_id: Optional[str] = None, skip: int = 0, limit: int = 100):
+    """
+    Get all users, optionally filtered by space membership.
+
+    Args:
+        db: Database session
+        space_id: Optional space ID to filter users by space membership
+        skip: Number of records to skip (pagination)
+        limit: Maximum number of records to return
+    """
     query = db.query(User)
-    if tenant_id:
-        query = query.filter(User.tenant_id == tenant_id)
+
+    # Filter by space membership if space_id provided
+    if space_id:
+        query = query.join(UserSpaceRole).filter(UserSpaceRole.space_id == space_id)
+
     return query.offset(skip).limit(limit).all()
 
 def deactivate_user(db: Session, user_id: str) -> Optional[User]:
@@ -135,8 +133,7 @@ def delete_user(db: Session, user_id: str) -> bool:
 
     This will automatically delete (via database CASCADE):
     - All auth_identities (passwords, OAuth connections)
-    - All user_tenant_roles (tenant memberships)
-    - All user_sessions (active sessions)
+    - All user_space_roles (space memberships)
 
     Returns:
         bool: True if user was found and deleted, False if user not found

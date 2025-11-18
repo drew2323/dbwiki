@@ -14,8 +14,8 @@ from app.models.user import (
 )
 from app.database import get_db
 from app.crud import users as user_crud
-from app.crud import roles as role_crud
-from app.crud import tenants as tenant_crud
+from app.crud import spaces as space_crud
+from app.crud import user_space_roles as user_space_role_crud
 from app.crud import auth_identities as auth_identity_crud
 from app.utils.auth import create_access_token
 from app.utils.password import verify_password, get_password_hash
@@ -54,28 +54,17 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     if auth_identity_crud.get_identity_by_provider_subject(db, "password", user_data.email):
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Get default tenant and viewer role
-    default_tenant = tenant_crud.get_default_tenant(db)
-    if not default_tenant:
-        raise HTTPException(status_code=500, detail="Default tenant not found")
-
-    viewer_role = role_crud.get_role_by_name(db, "Viewer", default_tenant.id)
-    if not viewer_role:
-        raise HTTPException(status_code=500, detail="Viewer role not found")
-
     # Hash password
     password_hash = get_password_hash(user_data.password)
 
     # Generate verification token
     verification_token = secrets.token_urlsafe(32)
 
-    # Create user
+    # Create user (without default space - users will be added to spaces separately)
     user = user_crud.create_user(
         db=db,
         email=user_data.email,
         username=user_data.username,
-        default_tenant_id=default_tenant.id,
-        role_id=viewer_role.id,
         name=user_data.name,
         is_verified=False
     )
@@ -188,10 +177,7 @@ async def auth_callback(request: Request, response: Response, db: Session = Depe
                 )
                 print(f"Linked Google account to existing user: {email}")
             else:
-                # Create new user with Google OAuth
-                default_tenant = tenant_crud.get_default_tenant(db)
-                viewer_role = role_crud.get_role_by_name(db, "Viewer", default_tenant.id)
-
+                # Create new user with Google OAuth (without default space)
                 username = email.split('@')[0] + "_" + secrets.token_hex(4)
                 user = user_crud.create_user(
                     db=db,
@@ -199,8 +185,6 @@ async def auth_callback(request: Request, response: Response, db: Session = Depe
                     username=username,
                     name=name,
                     picture=picture,
-                    default_tenant_id=default_tenant.id,
-                    role_id=viewer_role.id,
                     is_verified=True  # OAuth users are auto-verified
                 )
 

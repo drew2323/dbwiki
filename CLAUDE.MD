@@ -20,7 +20,7 @@ DBWiki is a full-stack wiki cms with a Vue 3 frontend and FastAPI backend, featu
 - **Language**: Python
 - **Database**: PostgreSQL with SQLAlchemy 2.0, Alembic migrations
 - **Authentication**: Email/password (bcrypt) + Google OAuth with JWT cookies
-- **Multi-tenancy**: User-Tenant-Role junction table, tenant context via X-Tenant-Id header
+- **Spaces Architecture**: User-Space-Role junction table, space context via X-Space-Id header
 - **Session Management**: Starlette SessionMiddleware
 - **Port**: 8000
 
@@ -70,11 +70,11 @@ docker compose up -d
 
 ### ✅ Implemented
 - **Authentication**: Email/password registration + Google OAuth, JWT httpOnly cookies, email verification, password reset
-- **Multi-tenant Architecture**: Users belong to multiple tenants with different roles per tenant, tenant switcher in UI
-- **Database**: PostgreSQL with Alembic migrations, Tenant/Role/User/UserTenantRole models
-- **Authorization**: Role-based + permission-based per tenant context via `require_role_in_tenant()` and `require_permission_in_tenant()`
-- **Frontend**: PrimeVue UI with dynamic theming, Pinia stores (authStore, tenantStore, layoutStore), axios interceptor for tenant context
-- **API**: Complete CRUD for users, tenants, roles, tenant membership management
+- **Spaces Architecture**: Users belong to multiple spaces with different roles per space, space switcher in UI
+- **Database**: PostgreSQL with Alembic migrations, Space/Role/User/UserSpaceRole models
+- **Authorization**: Role-based + permission-based per space context via `require_role_in_space()` and `require_permission_in_space()`
+- **Frontend**: PrimeVue UI with dynamic theming, Pinia stores (authStore, spaceStore, layoutStore), axios interceptor for space context
+- **API**: Complete CRUD for users, spaces, roles, space membership management
 - Docker containerization, Nginx reverse proxy
 
 
@@ -85,23 +85,23 @@ dbwiki/
 ├── backend/
 │   ├── alembic/          # Database migrations
 │   ├── app/
-│   │   ├── crud/         # Database operations (users, tenants, roles, user_tenant_roles)
+│   │   ├── crud/         # Database operations (users, spaces, roles, user_space_roles)
 │   │   ├── models/       # Pydantic (user.py) + SQLAlchemy (db_models.py) models
-│   │   ├── routers/      # API endpoints (auth.py, tenants.py)
+│   │   ├── routers/      # API endpoints (auth.py, spaces.py, roles.py)
 │   │   ├── utils/        # Password hashing, JWT auth
-│   │   └── dependencies/ # Auth context (get_current_user, require_role_in_tenant)
+│   │   └── dependencies/ # Auth context (get_current_user, require_role_in_space)
 │   ├── database.py       # SQLAlchemy engine + session
 │   └── main.py
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── components/   # TenantSwitcher.vue
-│   │   ├── config/       # axios.ts (X-Tenant-Id interceptor)
+│   │   ├── components/   # SpaceSwitcher.vue, admin components
+│   │   ├── config/       # axios.ts (X-Space-Id interceptor)
 │   │   ├── layout/       # AppTopbar, AppSettings
-│   │   ├── services/     # authService, tenantService
-│   │   ├── stores/       # authStore, tenantStore, layoutStore
+│   │   ├── services/     # authService, spaceService
+│   │   ├── stores/       # authStore, spaceStore, layoutStore
 │   │   ├── types/        # TypeScript interfaces
-│   │   └── views/        # Login, Register pages
+│   │   └── views/        # Login, Register, admin pages
 │   └── vite.config.ts
 │
 ├── docker-compose.yml    # PostgreSQL + app containers
@@ -154,8 +154,8 @@ See [DEPLOYMENT.md](docs/DEPLOYMENT.md) and [RELEASES.md](docs/RELEASES.md) for 
 ### Code Standards
 - **Frontend**: Vue 3 Composition API, TypeScript, PrimeVue patterns
 - **Backend**: FastAPI best practices, Pydantic validation, type hints, SQLAlchemy 2.0 patterns
-- **State**: Pinia stores (authStore, tenantStore, layoutStore) with localStorage persistence
-- **Multi-tenant**: Always use tenant context via `X-Tenant-Id` header, `require_role_in_tenant()` for auth
+- **State**: Pinia stores (authStore, spaceStore, layoutStore) with localStorage persistence
+- **Spaces**: Always use space context via `X-Space-Id` header, `require_role_in_space()` for auth
 - **Styling**: Tailwind CSS + PrimeVue theming
 - **Migrations**: Use Alembic for schema changes (`alembic revision -m "description"`)
 
@@ -190,7 +190,7 @@ See [DEPLOYMENT.md](docs/DEPLOYMENT.md) and [RELEASES.md](docs/RELEASES.md) for 
 **Authentication errors**
 - Verify JWT_SECRET_KEY in `.env` (32+ chars)
 - Check cookies in browser DevTools
-- For multi-tenant: Ensure X-Tenant-Id header sent
+- For spaces: Ensure X-Space-Id header sent
 
 **Frontend won't connect**
 - Verify backend on port 8000, frontend on 5173
@@ -213,7 +213,7 @@ See [DEVELOPMENT.md](docs/DEVELOPMENT.md#troubleshooting) for more details.
 
 ---
 
-**Last Updated**: October 8, 2025
+**Last Updated**: November 18, 2025
 **Primary Developer**: David P. Brazda (davidbrazda61@gmail.com)
 
 **Quick Navigation**:

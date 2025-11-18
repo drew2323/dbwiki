@@ -6,7 +6,6 @@
         <Button label="Delete" icon="pi pi-trash" severity="secondary" @click="confirmDeleteSelected" :disabled="!selectedRoles || !selectedRoles.length" />
       </template>
       <template #end>
-        <Select v-model="selectedTenantFilter" :options="tenantOptions" optionLabel="name" optionValue="id" placeholder="Filter by Tenant" class="mr-2" @change="onTenantFilterChange" showClear />
         <Button label="Export" icon="pi pi-upload" severity="secondary" @click="exportCSV" />
       </template>
     </Toolbar>
@@ -35,12 +34,6 @@
       <Column field="name" header="Role Name" sortable style="min-width: 12rem">
         <template #body="{ data }">
           <div class="font-medium">{{ data.name }}</div>
-        </template>
-      </Column>
-
-      <Column field="tenant_id" header="Tenant" sortable style="min-width: 12rem">
-        <template #body="{ data }">
-          <span>{{ getTenantName(data.tenant_id) }}</span>
         </template>
       </Column>
 
@@ -74,11 +67,6 @@
         <FloatLabel class="mt-6">
           <InputText id="name" v-model="currentRole.name" required class="w-full" :invalid="!currentRole.name" />
           <label for="name">Role Name *</label>
-        </FloatLabel>
-
-        <FloatLabel>
-          <Select id="tenant" v-model="currentRole.tenant_id" :options="tenantOptions" optionLabel="name" optionValue="id" :disabled="isEditMode" class="w-full" :invalid="!currentRole.tenant_id" />
-          <label for="tenant">Tenant *</label>
         </FloatLabel>
 
         <FloatLabel>
@@ -123,9 +111,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoleStore } from '@/stores/roleStore'
-import { useTenantStore } from '@/stores/tenantStore'
 import { useToast } from 'primevue/usetoast'
 import type { Role } from '@/types/admin'
 
@@ -137,15 +124,11 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
-import Select from 'primevue/select'
-import IconField from 'primevue/iconfield'
-import InputIcon from 'primevue/inputicon'
 import FloatLabel from 'primevue/floatlabel'
 import Chip from 'primevue/chip'
 import Tooltip from 'primevue/tooltip'
 
 const roleStore = useRoleStore()
-const tenantStore = useTenantStore()
 const toast = useToast()
 
 const dt = ref()
@@ -154,28 +137,15 @@ const roleDialog = ref(false)
 const deleteRoleDialog = ref(false)
 const deleteRolesDialog = ref(false)
 const isEditMode = ref(false)
-const selectedTenantFilter = ref<string | null>(null)
 const currentRole = ref<Partial<Role> & { permissionsJson?: string }>({})
-
-const tenantOptions = computed(() => {
-  return tenantStore.userTenants.map(ut => ut.tenant)
-})
 
 onMounted(async () => {
   try {
-    await Promise.all([roleStore.fetchRoles(), tenantStore.fetchUserTenants()])
+    await roleStore.fetchRoles()
   } catch (error) {
     toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load roles', life: 3000 })
   }
 })
-
-async function onTenantFilterChange() {
-  try {
-    await roleStore.fetchRoles(selectedTenantFilter.value || undefined)
-  } catch (error) {
-    toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to filter roles', life: 3000 })
-  }
-}
 
 function openNew() {
   currentRole.value = { permissionsJson: '{}' }
@@ -195,7 +165,6 @@ function editRole(role: Role) {
 function duplicateRole(role: Role) {
   currentRole.value = {
     name: `${role.name} (Copy)`,
-    tenant_id: role.tenant_id,
     permissionsJson: JSON.stringify(role.permissions, null, 2)
   }
   isEditMode.value = false
@@ -208,8 +177,8 @@ function hideDialog() {
 }
 
 async function saveRole() {
-  if (!currentRole.value.name || !currentRole.value.tenant_id) {
-    toast.add({ severity: 'warn', summary: 'Warning', detail: 'Please fill required fields', life: 3000 })
+  if (!currentRole.value.name) {
+    toast.add({ severity: 'warn', summary: 'Warning', detail: 'Please enter a role name', life: 3000 })
     return
   }
 
@@ -228,7 +197,6 @@ async function saveRole() {
     } else {
       await roleStore.createRole({
         name: currentRole.value.name,
-        tenant_id: currentRole.value.tenant_id,
         permissions
       })
       toast.add({ severity: 'success', summary: 'Success', detail: 'Role created successfully', life: 3000 })
@@ -273,11 +241,6 @@ async function deleteSelectedRoles() {
   } catch (error) {
     toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to delete some roles', life: 3000 })
   }
-}
-
-function getTenantName(tenantId: string) {
-  const tenant = tenantStore.userTenants.find(ut => ut.tenant.id === tenantId)
-  return tenant?.tenant.name || 'Unknown'
 }
 
 function getPermissionChips(permissions: Record<string, any>) {

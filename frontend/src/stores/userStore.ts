@@ -130,6 +130,48 @@ export const useUserStore = defineStore('userManagement', () => {
     }
   }
 
+  async function grantSuperuser(userId: string) {
+    loading.value = true
+    error.value = null
+    try {
+      await userService.grantSuperuser(userId)
+      // Update local state
+      const user = users.value.find(u => u.id === userId)
+      if (user) {
+        user.is_superuser = true
+      }
+      if (selectedUser.value?.id === userId) {
+        selectedUser.value.is_superuser = true
+      }
+    } catch (err: any) {
+      error.value = err.response?.data?.detail || 'Failed to grant superuser'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function revokeSuperuser(userId: string) {
+    loading.value = true
+    error.value = null
+    try {
+      await userService.revokeSuperuser(userId)
+      // Update local state
+      const user = users.value.find(u => u.id === userId)
+      if (user) {
+        user.is_superuser = false
+      }
+      if (selectedUser.value?.id === userId) {
+        selectedUser.value.is_superuser = false
+      }
+    } catch (err: any) {
+      error.value = err.response?.data?.detail || 'Failed to revoke superuser'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   function setSelectedUser(user: User | null) {
     selectedUser.value = user
   }
@@ -155,6 +197,8 @@ export const useUserStore = defineStore('userManagement', () => {
     activateUser,
     deactivateUser,
     deleteUser,
+    grantSuperuser,
+    revokeSuperuser,
     setSelectedUser,
     clearError
   }

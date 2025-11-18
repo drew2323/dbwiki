@@ -11,24 +11,24 @@
 
     <DataTable
       :value="memberships"
-      dataKey="tenant_id"
+      dataKey="space_id"
       :loading="loading"
       responsive-layout="scroll"
       breakpoint="768px"
     >
       <template #empty>
         <div class="text-center py-8 text-surface-500 dark:text-surface-400">
-          <i class="pi pi-building text-4xl mb-3 block"></i>
-          <p>No tenant memberships found</p>
+          <i class="pi pi-box text-4xl mb-3 block"></i>
+          <p>No space memberships found</p>
           <Button label="Add First Membership" icon="pi pi-plus" class="mt-3" @click="openNew" size="small" />
         </div>
       </template>
 
-      <Column field="tenant" header="Tenant" style="min-width: 12rem">
+      <Column field="space" header="Space" style="min-width: 12rem">
         <template #body="{ data }">
           <div class="flex items-center gap-2">
-            <i class="pi pi-building text-primary"></i>
-            <span class="font-medium">{{ data.tenant }}</span>
+            <i class="pi pi-box text-primary"></i>
+            <span class="font-medium">{{ data.space }}</span>
           </div>
         </template>
       </Column>
@@ -74,51 +74,44 @@
       <div class="flex flex-col gap-6">
         <FloatLabel class="mt-6">
           <Select
-            id="tenant"
-            v-model="currentMembership.tenant_id"
-            :options="availableTenants"
+            id="space"
+            v-model="currentMembership.space_id"
+            :options="availableSpaces"
             optionLabel="name"
             optionValue="id"
             :disabled="isEditMode"
             class="w-full"
-            :invalid="!currentMembership.tenant_id"
-            @change="onTenantChange"
+            :invalid="!currentMembership.space_id"
           >
             <template #value="slotProps">
               <div v-if="slotProps.value" class="flex items-center gap-2">
-                <i class="pi pi-building"></i>
-                <span>{{ availableTenants.find(t => t.id === slotProps.value)?.name }}</span>
+                <i class="pi pi-box"></i>
+                <span>{{ availableSpaces.find(s => s.id === slotProps.value)?.name }}</span>
               </div>
             </template>
           </Select>
-          <label for="tenant">Tenant *</label>
+          <label for="space">Space *</label>
         </FloatLabel>
 
-        <div class="flex flex-col gap-2">
-          <FloatLabel>
-            <Select
-              id="role"
-              v-model="currentMembership.role_id"
-              :options="filteredRoles"
-              optionLabel="name"
-              optionValue="id"
-              :disabled="!currentMembership.tenant_id"
-              class="w-full"
-              :invalid="!currentMembership.role_id"
-            >
-              <template #value="slotProps">
-                <div v-if="slotProps.value" class="flex items-center gap-2">
-                  <i class="pi pi-shield"></i>
-                  <span>{{ filteredRoles.find(r => r.id === slotProps.value)?.name }}</span>
-                </div>
-              </template>
-            </Select>
-            <label for="role">Role *</label>
-          </FloatLabel>
-          <small v-if="!currentMembership.tenant_id" class="text-surface-500">
-            Please select a tenant first to see available roles
-          </small>
-        </div>
+        <FloatLabel>
+          <Select
+            id="role"
+            v-model="currentMembership.role_id"
+            :options="filteredRoles"
+            optionLabel="name"
+            optionValue="id"
+            class="w-full"
+            :invalid="!currentMembership.role_id"
+          >
+            <template #value="slotProps">
+              <div v-if="slotProps.value" class="flex items-center gap-2">
+                <i class="pi pi-shield"></i>
+                <span>{{ filteredRoles.find(r => r.id === slotProps.value)?.name }}</span>
+              </div>
+            </template>
+          </Select>
+          <label for="role">Role *</label>
+        </FloatLabel>
       </div>
 
       <template #footer>
@@ -131,8 +124,8 @@
     <Dialog v-model:visible="deleteDialog" :style="{ width: '450px' }" header="Confirm" :modal="true">
       <div class="flex items-center gap-4">
         <i class="pi pi-exclamation-triangle !text-3xl"></i>
-        <span v-if="currentMembership.tenant">
-          Are you sure you want to remove this user from <b>{{ currentMembership.tenant }}</b>?
+        <span v-if="currentMembership.space">
+          Are you sure you want to remove this user from <b>{{ currentMembership.space }}</b>?
         </span>
       </div>
       <template #footer>
@@ -142,17 +135,18 @@
     </Dialog>
   </div>
   <div v-else class="text-center py-8 text-surface-500 dark:text-surface-400">
-    <i class="pi pi-building text-6xl mb-4 block"></i>
-    <p class="text-xl">Select a user to view tenant memberships</p>
+    <i class="pi pi-box text-6xl mb-4 block"></i>
+    <p class="text-xl">Select a user to view space memberships</p>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
-import { useTenantStore } from '@/stores/tenantStore'
+import { useSpaceStore } from '@/stores/spaceStore'
 import { useRoleStore } from '@/stores/roleStore'
-import { tenantService } from '@/services/tenantService'
+import { useAuthStore } from '@/stores/authStore'
+import { spaceService } from '@/services/spaceService'
 import type { User } from '@/types/admin'
 
 // PrimeVue Components
@@ -174,8 +168,9 @@ interface Props {
 
 const props = defineProps<Props>()
 
-const tenantStore = useTenantStore()
+const spaceStore = useSpaceStore()
 const roleStore = useRoleStore()
+const authStore = useAuthStore()
 const toast = useToast()
 
 const memberships = ref<any[]>([])
@@ -184,14 +179,15 @@ const deleteDialog = ref(false)
 const isEditMode = ref(false)
 const loading = ref(false)
 const currentMembership = ref<any>({})
+const allSpaces = ref<any[]>([])
 
-const availableTenants = computed(() => {
-  return tenantStore.userTenants.map(ut => ut.tenant)
+const availableSpaces = computed(() => {
+  return allSpaces.value
 })
 
 const filteredRoles = computed(() => {
-  if (!currentMembership.value.tenant_id) return []
-  return roleStore.roles.filter(r => r.tenant_id === currentMembership.value.tenant_id)
+  // Roles are now global, return all roles (no space filtering needed)
+  return roleStore.roles
 })
 
 watch(() => props.user, async (newUser) => {
@@ -204,10 +200,20 @@ watch(() => props.user, async (newUser) => {
 
 onMounted(async () => {
   await Promise.all([
-    tenantStore.fetchUserTenants(),
+    fetchAllSpaces(),
     roleStore.fetchRoles()
   ])
 })
+
+async function fetchAllSpaces() {
+  try {
+    // Superusers and admins see spaces where they have admin rights
+    // This filters based on backend logic (superusers see all, admins see their admin spaces)
+    allSpaces.value = await spaceService.getAdminSpaces()
+  } catch (error) {
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load spaces', life: 3000 })
+  }
+}
 
 async function fetchMemberships() {
   if (!props.user) return
@@ -215,19 +221,19 @@ async function fetchMemberships() {
   loading.value = true
   try {
     memberships.value = []
-    for (const ut of tenantStore.userTenants) {
+    for (const space of allSpaces.value) {
       try {
-        const data = await tenantService.getTenantUsers(ut.tenant.id)
+        const data = await spaceService.getSpaceUsers(space.id)
         const userMembership = data.find((u: any) => u.id === props.user?.id)
         if (userMembership) {
           memberships.value.push({
             ...userMembership,
-            tenant: ut.tenant.name,
-            tenant_id: ut.tenant.id
+            space: space.name,
+            space_id: space.id
           })
         }
       } catch (err) {
-        console.warn(`Failed to fetch users for tenant ${ut.tenant.name}:`, err)
+        console.warn(`Failed to fetch users for space ${space.name}:`, err)
       }
     }
   } catch (error) {
@@ -245,16 +251,12 @@ function openNew() {
 
 function editMembership(data: any) {
   currentMembership.value = {
-    tenant_id: data.tenant_id,
-    tenant: data.tenant,
+    space_id: data.space_id,
+    space: data.space,
     role_id: data.role.id
   }
   isEditMode.value = true
   membershipDialog.value = true
-}
-
-function onTenantChange() {
-  currentMembership.value.role_id = null
 }
 
 function hideDialog() {
@@ -263,7 +265,7 @@ function hideDialog() {
 }
 
 async function saveMembership() {
-  if (!props.user || !currentMembership.value.tenant_id || !currentMembership.value.role_id) {
+  if (!props.user || !currentMembership.value.space_id || !currentMembership.value.role_id) {
     toast.add({ severity: 'warn', summary: 'Warning', detail: 'Please fill all required fields', life: 3000 })
     return
   }
@@ -271,16 +273,16 @@ async function saveMembership() {
   loading.value = true
   try {
     if (isEditMode.value) {
-      await tenantStore.updateUserRoleInTenant(
+      await spaceService.updateUserRoleInSpace(
         props.user.id,
-        currentMembership.value.tenant_id,
+        currentMembership.value.space_id,
         currentMembership.value.role_id
       )
       toast.add({ severity: 'success', summary: 'Success', detail: 'Role updated successfully', life: 3000 })
     } else {
-      await tenantStore.addUserToTenant(
+      await spaceService.addUserToSpace(
         props.user.id,
-        currentMembership.value.tenant_id,
+        currentMembership.value.space_id,
         currentMembership.value.role_id
       )
       toast.add({ severity: 'success', summary: 'Success', detail: 'Membership added successfully', life: 3000 })
@@ -297,18 +299,18 @@ async function saveMembership() {
 
 function confirmDelete(data: any) {
   currentMembership.value = {
-    tenant_id: data.tenant_id,
-    tenant: data.tenant
+    space_id: data.space_id,
+    space: data.space
   }
   deleteDialog.value = true
 }
 
 async function deleteMembership() {
-  if (!props.user || !currentMembership.value.tenant_id) return
+  if (!props.user || !currentMembership.value.space_id) return
 
   loading.value = true
   try {
-    await tenantStore.removeUserFromTenant(props.user.id, currentMembership.value.tenant_id)
+    await spaceService.removeUserFromSpace(props.user.id, currentMembership.value.space_id)
     toast.add({ severity: 'success', summary: 'Success', detail: 'Membership removed successfully', life: 3000 })
     deleteDialog.value = false
     currentMembership.value = {}

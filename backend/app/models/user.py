@@ -20,7 +20,7 @@ class UserResponse(BaseModel):
     picture: Optional[str] = None
     is_active: bool
     is_verified: bool
-    default_tenant_id: str
+    is_superuser: bool
     created_at: datetime
     last_login: Optional[datetime] = None
 

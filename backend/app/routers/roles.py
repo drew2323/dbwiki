@@ -1,14 +1,14 @@
 """
-Roles management router for CRUD operations on roles.
+Roles management router for CRUD operations on global roles.
+Roles are global entities (superuser, admin, edit, read) that can be assigned to users in different spaces.
 """
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
 from app.database import get_db
 from app.crud import roles as role_crud
-from app.crud import tenants as tenant_crud
 
 router = APIRouter(prefix="/api/roles", tags=["roles"])
 
@@ -16,7 +16,6 @@ router = APIRouter(prefix="/api/roles", tags=["roles"])
 class RoleResponse(BaseModel):
     id: str
     name: str
-    tenant_id: str
     permissions: Dict[str, Any]
     created_at: str
 
@@ -26,7 +25,6 @@ class RoleResponse(BaseModel):
 
 class CreateRole(BaseModel):
     name: str
-    tenant_id: str
     permissions: Dict[str, Any] = {}
 
 
@@ -36,27 +34,17 @@ class UpdateRole(BaseModel):
 
 
 @router.get("", response_model=List[RoleResponse])
-async def list_roles(
-    tenant_id: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
-):
+async def list_roles(db: Session = Depends(get_db)):
     """
-    List all roles, optionally filtered by tenant.
-    If no tenant_id provided, returns roles from all tenants.
+    List all global roles.
+    Returns all available roles that can be assigned to users in spaces.
     """
-    from app.models.db_models import Role
-
-    query = db.query(Role)
-    if tenant_id:
-        query = query.filter(Role.tenant_id == tenant_id)
-
-    roles = query.all()
+    roles = role_crud.get_all_roles(db)
 
     return [
         RoleResponse(
             id=role.id,
             name=role.name,
-            tenant_id=role.tenant_id,
             permissions=role.permissions,
             created_at=role.created_at.isoformat()
         )
@@ -74,7 +62,6 @@ async def get_role(role_id: str, db: Session = Depends(get_db)):
     return RoleResponse(
         id=role.id,
         name=role.name,
-        tenant_id=role.tenant_id,
         permissions=role.permissions,
         created_at=role.created_at.isoformat()
     )
@@ -82,31 +69,27 @@ async def get_role(role_id: str, db: Session = Depends(get_db)):
 
 @router.post("", response_model=RoleResponse)
 async def create_role(role_data: CreateRole, db: Session = Depends(get_db)):
-    """Create a new role"""
-    # Verify tenant exists
-    tenant = tenant_crud.get_tenant_by_id(db, role_data.tenant_id)
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-
-    # Check if role with same name exists in this tenant
-    existing = role_crud.get_role_by_name(db, role_data.name, role_data.tenant_id)
+    """
+    Create a new global role.
+    Note: Only superusers should be allowed to create roles.
+    """
+    # Check if role with same name already exists (globally unique)
+    existing = role_crud.get_role_by_name(db, role_data.name)
     if existing:
         raise HTTPException(
             status_code=400,
-            detail=f"Role '{role_data.name}' already exists in this tenant"
+            detail=f"Role '{role_data.name}' already exists"
         )
 
     role = role_crud.create_role(
         db=db,
         name=role_data.name,
-        tenant_id=role_data.tenant_id,
         permissions=role_data.permissions
     )
 
     return RoleResponse(
         id=role.id,
         name=role.name,
-        tenant_id=role.tenant_id,
         permissions=role.permissions,
         created_at=role.created_at.isoformat()
     )
@@ -118,64 +101,63 @@ async def update_role(
     role_data: UpdateRole,
     db: Session = Depends(get_db)
 ):
-    """Update a role"""
-    from app.models.db_models import Role
-
-    role = db.query(Role).filter(Role.id == role_id).first()
+    """
+    Update a global role.
+    Note: Only superusers should be allowed to update roles.
+    """
+    role = role_crud.get_role_by_id(db, role_id)
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
 
-    # Check if new name conflicts with existing role in same tenant
+    # Check if new name conflicts with existing role (globally unique)
     if role_data.name and role_data.name != role.name:
-        existing = role_crud.get_role_by_name(db, role_data.name, role.tenant_id)
+        existing = role_crud.get_role_by_name(db, role_data.name)
         if existing and existing.id != role_id:
             raise HTTPException(
                 status_code=400,
-                detail=f"Role '{role_data.name}' already exists in this tenant"
+                detail=f"Role '{role_data.name}' already exists"
             )
 
-    # Update fields
-    if role_data.name:
-        role.name = role_data.name
-    if role_data.permissions is not None:
-        role.permissions = role_data.permissions
-
-    db.commit()
-    db.refresh(role)
+    # Update role
+    updated_role = role_crud.update_role(
+        db=db,
+        role_id=role_id,
+        name=role_data.name,
+        permissions=role_data.permissions
+    )
 
     return RoleResponse(
-        id=role.id,
-        name=role.name,
-        tenant_id=role.tenant_id,
-        permissions=role.permissions,
-        created_at=role.created_at.isoformat()
+        id=updated_role.id,
+        name=updated_role.name,
+        permissions=updated_role.permissions,
+        created_at=updated_role.created_at.isoformat()
     )
 
 
 @router.delete("/{role_id}")
 async def delete_role(role_id: str, db: Session = Depends(get_db)):
     """
-    Delete a role.
+    Delete a global role.
     Note: This will fail if there are users currently assigned to this role.
+    Only superusers should be allowed to delete roles.
     """
-    from app.models.db_models import Role, UserTenantRole
+    from app.models.db_models import UserSpaceRole
 
-    role = db.query(Role).filter(Role.id == role_id).first()
+    role = role_crud.get_role_by_id(db, role_id)
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
 
-    # Check if any users have this role
-    users_with_role = db.query(UserTenantRole).filter(
-        UserTenantRole.role_id == role_id
+    # Check if any users have this role in any space
+    users_with_role = db.query(UserSpaceRole).filter(
+        UserSpaceRole.role_id == role_id
     ).count()
 
     if users_with_role > 0:
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot delete role. {users_with_role} user(s) are currently assigned to this role. Please reassign them first."
+            detail=f"Cannot delete role '{role.name}'. {users_with_role} user(s) are currently assigned to this role across all spaces. Please reassign them first."
         )
 
-    db.delete(role)
-    db.commit()
+    role_crud.delete_role(db, role_id)
 
-    return {"message": "Role deleted successfully"}
+    return {"message": f"Role '{role.name}' deleted successfully"}

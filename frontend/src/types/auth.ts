@@ -7,7 +7,7 @@ export interface User {
   google_id?: string
   is_active: boolean
   is_verified: boolean
-  default_tenant_id: string
+  is_superuser: boolean
   created_at: string
   last_login?: string
 }

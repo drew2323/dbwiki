@@ -64,6 +64,7 @@
                         <div class="text-xs text-surface-500 dark:text-surface-400 truncate">{{ data.email }}</div>
                         <div class="flex gap-1 mt-1">
                           <Tag :value="data.is_active ? 'Active' : 'Inactive'" :severity="data.is_active ? 'success' : 'danger'" class="text-xs" />
+                          <Tag v-if="data.is_superuser" value="Superuser" severity="warn" icon="pi pi-shield" class="text-xs" />
                         </div>
                       </div>
                     </div>
@@ -89,8 +90,8 @@
                 <TabPanel header="Auth Identities">
                   <UserAuthIdentitiesTab :user="selectedUser" />
                 </TabPanel>
-                <TabPanel header="Tenant Memberships">
-                  <UserTenantMembershipsTab :user="selectedUser" />
+                <TabPanel header="Space Memberships">
+                  <UserSpaceMembershipsTab :user="selectedUser" />
                 </TabPanel>
               </TabView>
             </div>
@@ -121,9 +122,10 @@
               <div class="flex-1">
                 <div class="font-semibold">{{ user.name || user.username }}</div>
                 <div class="text-sm text-surface-500">{{ user.email }}</div>
-                <div class="flex gap-2 mt-2">
+                <div class="flex gap-2 mt-2 flex-wrap">
                   <Tag :value="user.is_active ? 'Active' : 'Inactive'" :severity="user.is_active ? 'success' : 'danger'" />
                   <Tag :value="user.is_verified ? 'Verified' : 'Not Verified'" :severity="user.is_verified ? 'success' : 'warn'" />
+                  <Tag v-if="user.is_superuser" value="Superuser" severity="warn" icon="pi pi-shield" />
                 </div>
               </div>
               <i class="pi pi-chevron-right text-surface-400"></i>
@@ -143,7 +145,7 @@
             <UserAuthIdentitiesTab :user="selectedUser" />
           </TabPanel>
           <TabPanel header="Memberships">
-            <UserTenantMembershipsTab :user="selectedUser" />
+            <UserSpaceMembershipsTab :user="selectedUser" />
           </TabPanel>
         </TabView>
       </div>
@@ -192,7 +194,7 @@ import TabPanel from 'primevue/tabpanel'
 // Child Components
 import UserProfileTab from './UserProfileTab.vue'
 import UserAuthIdentitiesTab from './UserAuthIdentitiesTab.vue'
-import UserTenantMembershipsTab from './UserTenantMembershipsTab.vue'
+import UserSpaceMembershipsTab from './UserSpaceMembershipsTab.vue'
 
 const userStore = useUserStore()
 const toast = useToast()

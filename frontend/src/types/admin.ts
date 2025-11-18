@@ -10,7 +10,6 @@ export interface User {
   picture?: string
   is_active: boolean
   is_verified: boolean
-  default_tenant_id: string
   created_at: string
   updated_at?: string
   last_login?: string
@@ -36,31 +35,33 @@ export interface AuthProvider {
 export interface Role {
   id: string
   name: string
-  tenant_id: string
   permissions: Record<string, boolean | any>
   created_at: string
 }
 
-export interface Tenant {
+export interface Space {
   id: string
+  key: string
   name: string
-  subdomain?: string
-  is_active: boolean
+  description?: string
+  visibility: 'private' | 'public'
+  home_page_id?: string
+  created_by: string
   created_at: string
   updated_at?: string
 }
 
-export interface UserTenantRole {
+export interface UserSpaceRole {
   id: string
   user_id: string
-  tenant_id: string
+  space_id: string
   role_id: string
   is_active: boolean
   created_at: string
   expires_at?: string
   // Populated relationships
   user?: User
-  tenant?: Tenant
+  space?: Space
   role?: Role
 }
 
@@ -69,7 +70,6 @@ export interface CreateUser {
   email: string
   username: string
   name?: string
-  default_tenant_id: string
 }
 
 export interface UpdateUser {
@@ -91,7 +91,6 @@ export interface UpdateAuthIdentity {
 
 export interface CreateRole {
   name: string
-  tenant_id: string
   permissions?: Record<string, boolean | any>
 }
 
@@ -100,41 +99,45 @@ export interface UpdateRole {
   permissions?: Record<string, boolean | any>
 }
 
-export interface CreateTenant {
+export interface CreateSpace {
+  key: string
   name: string
-  subdomain?: string
+  description?: string
+  visibility?: 'private' | 'public'
 }
 
-export interface UpdateTenant {
+export interface UpdateSpace {
+  key?: string
   name?: string
-  subdomain?: string
-  is_active?: boolean
+  description?: string
+  visibility?: 'private' | 'public'
+  home_page_id?: string
 }
 
-export interface CreateUserTenantRole {
+export interface CreateUserSpaceRole {
   user_id: string
-  tenant_id: string
+  space_id: string
   role_id: string
   expires_at?: string
 }
 
-export interface UpdateUserTenantRole {
+export interface UpdateUserSpaceRole {
   role_id: string
 }
 
 // Display/Enhanced types
 export interface UserWithDetails extends User {
   auth_identities?: AuthIdentity[]
-  tenant_roles?: UserTenantRole[]
+  space_roles?: UserSpaceRole[]
 }
 
-export interface TenantWithUserCount extends Tenant {
+export interface SpaceWithUserCount extends Space {
   user_count?: number
 }
 
-export interface UserTenantRoleDisplay extends UserTenantRole {
+export interface UserSpaceRoleDisplay extends UserSpaceRole {
   user_name?: string
   user_email?: string
-  tenant_name?: string
+  space_name?: string
   role_name?: string
 }

@@ -1,6 +1,7 @@
 /**
  * Role Store
- * Manages roles and permissions
+ * Manages global roles and permissions.
+ * Roles are global entities (superuser, admin, edit, read) that can be assigned to users in different spaces.
  */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
@@ -15,25 +16,14 @@ export const useRoleStore = defineStore('role', () => {
   const error = ref<string | null>(null)
 
   // Computed
-  const rolesByTenant = computed(() => {
-    const grouped: Record<string, Role[]> = {}
-    roles.value.forEach(role => {
-      if (!grouped[role.tenant_id]) {
-        grouped[role.tenant_id] = []
-      }
-      grouped[role.tenant_id].push(role)
-    })
-    return grouped
-  })
-
   const roleCount = computed(() => roles.value.length)
 
   // Actions
-  async function fetchRoles(tenantId?: string) {
+  async function fetchRoles() {
     loading.value = true
     error.value = null
     try {
-      roles.value = await roleService.getRoles(tenantId)
+      roles.value = await roleService.getRoles()
     } catch (err: any) {
       error.value = err.response?.data?.detail || 'Failed to fetch roles'
       throw err
@@ -127,7 +117,6 @@ export const useRoleStore = defineStore('role', () => {
     loading,
     error,
     // Computed
-    rolesByTenant,
     roleCount,
     // Actions
     fetchRoles,

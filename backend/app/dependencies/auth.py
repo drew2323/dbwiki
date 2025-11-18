@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 from sqlalchemy.orm import Session
 from app.utils.auth import verify_token
 from app.crud import users as user_crud
-from app.crud import user_tenant_roles as utr_crud
+from app.crud import user_space_roles as usr_crud
 from app.models.db_models import User, Role
 from app.database import get_db
 
@@ -43,133 +43,125 @@ async def get_current_user_optional(request: Request, db: Session = Depends(get_
         return None
 
 
-async def get_current_tenant_id(
+async def get_current_space_id(
     request: Request,
-    x_tenant_id: Optional[str] = Header(None),
+    x_space_id: Optional[str] = Header(None),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> str:
     """
-    Get the current tenant context from header or use user's default tenant.
-    Header format: X-Tenant-Id: <tenant_id>
+    Get the current space context from header.
+    Header format: X-Space-Id: <space_id>
+    Raises 400 if no space context provided.
+    Superusers automatically have access to all spaces.
     """
-    tenant_id = x_tenant_id or user.default_tenant_id
-
-    # Verify user has access to this tenant
-    if not utr_crud.user_has_access_to_tenant(db, user.id, tenant_id):
+    if not x_space_id:
         raise HTTPException(
-            status_code=403,
-            detail=f"User does not have access to tenant {tenant_id}"
+            status_code=400,
+            detail="X-Space-Id header is required"
         )
 
-    return tenant_id
+    # Superusers have implicit access to all spaces
+    if user.is_superuser:
+        return x_space_id
+
+    # Verify user has access to this space
+    if not usr_crud.user_has_access_to_space(db, user.id, x_space_id):
+        raise HTTPException(
+            status_code=403,
+            detail=f"User does not have access to space {x_space_id}"
+        )
+
+    return x_space_id
 
 
-async def get_user_with_tenant(
+async def get_user_with_space(
     user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_tenant_id),
+    space_id: str = Depends(get_current_space_id),
     db: Session = Depends(get_db)
 ) -> Tuple[User, str]:
     """
-    Get both the current user and tenant context.
-    Returns: (user, tenant_id)
+    Get both the current user and space context.
+    Returns: (user, space_id)
     """
-    return user, tenant_id
+    return user, space_id
 
 
-async def get_user_role_in_tenant(
+async def get_user_role_in_space(
     user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_tenant_id),
+    space_id: str = Depends(get_current_space_id),
     db: Session = Depends(get_db)
 ) -> Role:
     """
-    Get the user's role in the current tenant context.
+    Get the user's role in the current space context.
     """
-    role = utr_crud.get_user_role_in_tenant(db, user.id, tenant_id)
+    role = usr_crud.get_user_role_in_space(db, user.id, space_id)
     if not role:
         raise HTTPException(
             status_code=403,
-            detail=f"User has no role in tenant {tenant_id}"
+            detail=f"User has no role in space {space_id}"
         )
     return role
 
 
-def require_role_in_tenant(required_role: str):
+def require_role_in_space(required_role: str):
     """
-    Dependency factory to require specific role in current tenant context.
-    Usage: user = Depends(require_role_in_tenant("Admin"))
+    Dependency factory to require specific role in current space context.
+    Usage: user = Depends(require_role_in_space("Admin"))
+    Superusers automatically pass all role checks.
     """
     async def role_checker(
         user: User = Depends(get_current_user),
-        tenant_id: str = Depends(get_current_tenant_id),
+        space_id: str = Depends(get_current_space_id),
         db: Session = Depends(get_db)
     ) -> User:
-        role = utr_crud.get_user_role_in_tenant(db, user.id, tenant_id)
+        # Superusers bypass all role checks
+        if user.is_superuser:
+            return user
+
+        role = usr_crud.get_user_role_in_space(db, user.id, space_id)
         if not role or role.name != required_role:
             raise HTTPException(
                 status_code=403,
-                detail=f"Role '{required_role}' required in current tenant"
+                detail=f"Role '{required_role}' required in current space"
             )
         return user
     return role_checker
 
 
-def require_permission_in_tenant(required_permission: str):
+def require_permission_in_space(required_permission: str):
     """
-    Dependency factory to require specific permission in current tenant context.
-    Usage: user = Depends(require_permission_in_tenant("content_edit"))
+    Dependency factory to require specific permission in current space context.
+    Usage: user = Depends(require_permission_in_space("content_edit"))
+    Superusers automatically pass all permission checks.
     """
     async def permission_checker(
         user: User = Depends(get_current_user),
-        tenant_id: str = Depends(get_current_tenant_id),
+        space_id: str = Depends(get_current_space_id),
         db: Session = Depends(get_db)
     ) -> User:
-        permissions = utr_crud.get_user_permissions_in_tenant(db, user.id, tenant_id)
+        # Superusers bypass all permission checks
+        if user.is_superuser:
+            return user
+
+        permissions = usr_crud.get_user_permissions_in_space(db, user.id, space_id)
         if not permissions.get(required_permission, False):
             raise HTTPException(
                 status_code=403,
-                detail=f"Permission '{required_permission}' required in current tenant"
+                detail=f"Permission '{required_permission}' required in current space"
             )
         return user
     return permission_checker
 
 
-# Legacy: Keep for backward compatibility with default tenant
-def require_role(required_role: str):
+async def require_superuser(user: User = Depends(get_current_user)) -> User:
     """
-    Dependency factory to require specific role in default tenant.
-    DEPRECATED: Use require_role_in_tenant for multi-tenant support.
-    Usage: user = Depends(require_role("Admin"))
+    Dependency to require superuser access.
+    Usage: user = Depends(require_superuser)
     """
-    async def role_checker(
-        user: User = Depends(get_current_user),
-        db: Session = Depends(get_db)
-    ) -> User:
-        role = utr_crud.get_user_role_in_tenant(db, user.id, user.default_tenant_id)
-        if not role or role.name != required_role:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Role '{required_role}' required"
-            )
-        return user
-    return role_checker
-
-
-def require_permission(required_permission: str):
-    """
-    Dependency factory to require specific permission in default tenant.
-    DEPRECATED: Use require_permission_in_tenant for multi-tenant support.
-    Usage: user = Depends(require_permission("content_edit"))
-    """
-    async def permission_checker(
-        user: User = Depends(get_current_user),
-        db: Session = Depends(get_db)
-    ) -> User:
-        permissions = utr_crud.get_user_permissions_in_tenant(db, user.id, user.default_tenant_id)
-        if not permissions.get(required_permission, False):
-            raise HTTPException(
-                status_code=403,
-                detail=f"Permission '{required_permission}' required"
-            )
-        return user
-    return permission_checker
+    if not user.is_superuser:
+        raise HTTPException(
+            status_code=403,
+            detail="Superuser access required"
+        )
+    return user

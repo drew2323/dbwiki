@@ -1,6 +1,6 @@
 """
-Multi-tenant database models with junction table support.
-This allows users to belong to multiple tenants with different roles in each.
+CMS spaces database models with junction table support.
+This allows users to belong to multiple spaces with different roles in each.
 """
 from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, JSON, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
@@ -11,33 +11,42 @@ import uuid
 def generate_uuid():
     return str(uuid.uuid4())
 
-class Tenant(Base):
-    __tablename__ = "tenants"
+class Space(Base):
+    """
+    Top-level content container in the CMS.
+    Each space can have multiple users with different roles.
+    """
+    __tablename__ = "spaces"
 
     id = Column(String, primary_key=True, default=generate_uuid)
+    key = Column(String(100), unique=True, nullable=False)  # URL-safe short code
     name = Column(String(255), nullable=False)
-    subdomain = Column(String(100), unique=True, nullable=True)
-    is_active = Column(Boolean, default=True, nullable=False)
+    description = Column(Text, nullable=True)
+    visibility = Column(String(20), default='private', nullable=False)  # 'private' | 'public'
+    home_page_id = Column(String(36), nullable=True)  # Set later by pages module
+    created_by = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    roles = relationship("Role", back_populates="tenant")
-    user_tenant_roles = relationship("UserTenantRole", back_populates="tenant")
+    user_space_roles = relationship("UserSpaceRole", back_populates="space")
+    creator = relationship("User", foreign_keys=[created_by])
 
 
 class Role(Base):
+    """
+    Global roles that can be assigned to users in different spaces.
+    Examples: superuser, admin, edit, read
+    """
     __tablename__ = "roles"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    name = Column(String(100), nullable=False)
+    name = Column(String(100), nullable=False, unique=True)  # Globally unique
     permissions = Column(JSON, default=dict, nullable=False)
-    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # Relationships
-    tenant = relationship("Tenant", back_populates="roles")
-    user_tenant_roles = relationship("UserTenantRole", back_populates="role")
+    user_space_roles = relationship("UserSpaceRole", back_populates="role")
 
 
 class User(Base):
@@ -54,14 +63,12 @@ class User(Base):
     # Status
     is_active = Column(Boolean, default=True, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
+    is_superuser = Column(Boolean, default=False, nullable=False, index=True)
 
     # Verification tokens
     verification_token = Column(String(255), nullable=True)
     reset_token = Column(String(255), nullable=True)
     reset_token_expires = Column(DateTime(timezone=True), nullable=True)
-
-    # Default/Home tenant (the tenant user was created in)
-    default_tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -69,28 +76,27 @@ class User(Base):
     last_login = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    default_tenant = relationship("Tenant", foreign_keys=[default_tenant_id])
-    tenant_roles = relationship("UserTenantRole", back_populates="user", cascade="all, delete-orphan")
+    space_roles = relationship("UserSpaceRole", back_populates="user", cascade="all, delete-orphan")
     auth_identities = relationship("AuthIdentity", back_populates="user", cascade="all, delete-orphan")
 
 
-class UserTenantRole(Base):
+class UserSpaceRole(Base):
     """
-    Junction table that allows users to have different roles in different tenants.
+    Junction table that allows users to have different roles in different spaces.
 
     Example:
-        User John → Tenant A (role: Admin)
-        User John → Tenant B (role: Viewer)
-        User John → Tenant C (role: Editor)
+        User John → Space A (role: Admin)
+        User John → Space B (role: Viewer)
+        User John → Space C (role: Editor)
     """
-    __tablename__ = "user_tenant_roles"
+    __tablename__ = "user_space_roles"
 
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    space_id = Column(String, ForeignKey("spaces.id", ondelete="CASCADE"), nullable=False, index=True)
     role_id = Column(String, ForeignKey("roles.id", ondelete="CASCADE"), nullable=False)
 
-    # Track if this is the user's primary/active tenant
+    # Track if this association is active
     is_active = Column(Boolean, default=True, nullable=False)
 
     # When was this association created
@@ -100,13 +106,13 @@ class UserTenantRole(Base):
     expires_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    user = relationship("User", back_populates="tenant_roles")
-    tenant = relationship("Tenant", back_populates="user_tenant_roles")
-    role = relationship("Role", back_populates="user_tenant_roles")
+    user = relationship("User", back_populates="space_roles")
+    space = relationship("Space", back_populates="user_space_roles")
+    role = relationship("Role", back_populates="user_space_roles")
 
-    # Ensure unique user-tenant combination
+    # Ensure unique user-space combination
     __table_args__ = (
-        UniqueConstraint('user_id', 'tenant_id', name='uq_user_tenant'),
+        UniqueConstraint('user_id', 'space_id', name='uq_user_space'),
     )
 
 
@@ -146,22 +152,3 @@ class AuthIdentity(Base):
     )
 
 
-class UserSession(Base):
-    """
-    Track user's active tenant during their session.
-    This allows users to switch between tenants they have access to.
-    """
-    __tablename__ = "user_sessions"
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    current_tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
-
-    # Session tracking
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    last_activity = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-
-    # Device/browser info
-    ip_address = Column(String(45), nullable=True)
-    user_agent = Column(String(500), nullable=True)
