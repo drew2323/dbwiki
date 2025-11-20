@@ -11,10 +11,7 @@ declare module 'vue' {
     AuthIdentitiesTab: typeof import('./src/components/admin/AuthIdentitiesTab.vue')['default']
     BestSellingWidget: typeof import('./src/components/dashboard/BestSellingWidget.vue')['default']
     Button: typeof import('primevue/button')['default']
-    Chart: typeof import('primevue/chart')['default']
     Checkbox: typeof import('primevue/checkbox')['default']
-    Column: typeof import('primevue/column')['default']
-    DataTable: typeof import('primevue/datatable')['default']
     Drawer: typeof import('primevue/drawer')['default']
     FeaturesWidget: typeof import('./src/components/landing/FeaturesWidget.vue')['default']
     FloatingConfigurator: typeof import('./src/components/FloatingConfigurator.vue')['default']
@@ -24,7 +21,6 @@ declare module 'vue' {
     InputText: typeof import('primevue/inputtext')['default']
     LightweightChart: typeof import('./src/components/LightweightChart.vue')['default']
     MarkerModal: typeof import('./src/components/MarkerModal.vue')['default']
-    Menu: typeof import('primevue/menu')['default']
     Message: typeof import('primevue/message')['default']
     NotificationsWidget: typeof import('./src/components/dashboard/NotificationsWidget.vue')['default']
     Password: typeof import('primevue/password')['default']
@@ -49,6 +45,5 @@ declare module 'vue' {
   }
   export interface GlobalDirectives {
     StyleClass: typeof import('primevue/styleclass')['default']
-    Tooltip: typeof import('primevue/tooltip')['default']
   }
 }

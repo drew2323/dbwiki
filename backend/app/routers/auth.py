@@ -197,6 +197,12 @@ async def auth_callback(request: Request, response: Response, db: Session = Depe
                     metadata={"email": email, "name": name, "picture": picture}
                 )
 
+        # Check if user is active
+        if not user.is_active:
+            # Redirect to login page with error message
+            redirect_url = f"{FRONTEND_URL}/auth/login?error=account_deactivated"
+            return RedirectResponse(url=redirect_url)
+
         # Update last login
         user_crud.update_user_last_login(db, user.id)
 
@@ -220,7 +226,9 @@ async def auth_callback(request: Request, response: Response, db: Session = Depe
         import traceback
         print(f"Auth error: {e}")
         print(f"Traceback:\n{traceback.format_exc()}")
-        raise HTTPException(status_code=400, detail=f"Authentication failed: {str(e)}")
+        # Redirect to login page with generic error message
+        redirect_url = f"{FRONTEND_URL}/auth/login?error=auth_failed"
+        return RedirectResponse(url=redirect_url)
 
 
 @router.get("/me", response_model=UserResponse)

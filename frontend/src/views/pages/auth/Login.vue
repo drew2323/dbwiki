@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import FloatingConfigurator from '@/components/FloatingConfigurator.vue';
 import { useAuthStore } from '@/stores/authStore';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 
 const authStore = useAuthStore();
 const router = useRouter();
+const route = useRoute();
 const toast = useToast();
 
 const email = ref('');
@@ -14,6 +15,29 @@ const password = ref('');
 const checked = ref(false);
 const loading = ref(false);
 const errorMessage = ref('');
+
+// Check for error query parameter on mount (from OAuth redirects)
+onMounted(() => {
+    const error = route.query.error as string;
+    if (error) {
+        let message = 'Login failed';
+        if (error === 'account_deactivated') {
+            message = 'Account is deactivated';
+        } else if (error === 'auth_failed') {
+            message = 'Authentication failed. Please try again.';
+        }
+
+        errorMessage.value = message;
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: message,
+            life: 5000
+        });
+        // Clear the query parameter
+        router.replace({ query: {} });
+    }
+});
 
 async function handleEmailLogin() {
     if (!email.value || !password.value) {
