@@ -28,8 +28,14 @@ router = APIRouter(prefix="/api/attachments", tags=["attachments"])
 # ============================================================================
 
 # Local storage path (update for production with S3)
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+# Use /tmp for Docker compatibility, or env variable for production
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/tmp/uploads"))
+
+# Create directory lazily on first use, not at import time
+def ensure_upload_dir():
+    """Ensure upload directory exists"""
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    return UPLOAD_DIR
 
 
 def calculate_file_hash(file_path: Path) -> str:
@@ -68,9 +74,12 @@ async def request_presigned_upload(
     if not space:
         raise HTTPException(status_code=404, detail="Space not found")
 
+    # Ensure upload directory exists
+    upload_dir = ensure_upload_dir()
+
     # Generate upload path
     upload_path = attachment_crud.generate_upload_path(space_id, presign_data.filename)
-    full_path = UPLOAD_DIR / upload_path
+    full_path = upload_dir / upload_path
 
     # Create directory if needed
     full_path.parent.mkdir(parents=True, exist_ok=True)
@@ -118,12 +127,15 @@ async def upload_file(
     if attachment.created_by != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    # Ensure upload directory exists
+    upload_dir = ensure_upload_dir()
+
     # Save file to local storage
     upload_path = attachment_crud.generate_upload_path(
         attachment.space_id,
         attachment.filename
     )
-    full_path = UPLOAD_DIR / upload_path
+    full_path = upload_dir / upload_path
     full_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Write file
@@ -178,9 +190,12 @@ async def direct_upload(
         if not page or page.space_id != space_id:
             raise HTTPException(status_code=404, detail="Page not found in this space")
 
+    # Ensure upload directory exists
+    upload_dir = ensure_upload_dir()
+
     # Generate upload path
     upload_path = attachment_crud.generate_upload_path(space_id, file.filename)
-    full_path = UPLOAD_DIR / upload_path
+    full_path = upload_dir / upload_path
     full_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Save file
