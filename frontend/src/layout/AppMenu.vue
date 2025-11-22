@@ -61,8 +61,8 @@ const model = ref([
     {
         label: 'Home',
         items: [
-            { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' },
-            { label: 'Dashboard2', icon: 'pi pi-fw pi-chart-line', to: '/dashboard2' }
+            { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/admin/dashboard' },
+            { label: 'Analytics', icon: 'pi pi-fw pi-chart-line', to: '/admin/analytics' }
         ]
     },
     {
@@ -75,32 +75,32 @@ const model = ref([
     {
         label: 'UI Components',
         items: [
-            { label: 'Form Layout', icon: 'pi pi-fw pi-id-card', to: '/uikit/formlayout' },
-            { label: 'Input', icon: 'pi pi-fw pi-check-square', to: '/uikit/input' },
-            { label: 'Button', icon: 'pi pi-fw pi-mobile', to: '/uikit/button', class: 'rotated-icon' },
-            { label: 'Table', icon: 'pi pi-fw pi-table', to: '/uikit/table' },
-            { label: 'List', icon: 'pi pi-fw pi-list', to: '/uikit/list' },
-            { label: 'Tree', icon: 'pi pi-fw pi-share-alt', to: '/uikit/tree' },
-            { label: 'Panel', icon: 'pi pi-fw pi-tablet', to: '/uikit/panel' },
-            { label: 'Overlay', icon: 'pi pi-fw pi-clone', to: '/uikit/overlay' },
-            { label: 'Media', icon: 'pi pi-fw pi-image', to: '/uikit/media' },
-            { label: 'Menu', icon: 'pi pi-fw pi-bars', to: '/uikit/menu' },
-            { label: 'Message', icon: 'pi pi-fw pi-comment', to: '/uikit/message' },
-            { label: 'File', icon: 'pi pi-fw pi-file', to: '/uikit/file' },
-            { label: 'Chart', icon: 'pi pi-fw pi-chart-bar', to: '/uikit/charts' },
-            { label: 'Timeline', icon: 'pi pi-fw pi-calendar', to: '/uikit/timeline' },
-            { label: 'Misc', icon: 'pi pi-fw pi-circle', to: '/uikit/misc' }
+            { label: 'Form Layout', icon: 'pi pi-fw pi-id-card', to: '/admin/uikit/formlayout' },
+            { label: 'Input', icon: 'pi pi-fw pi-check-square', to: '/admin/uikit/input' },
+            { label: 'Button', icon: 'pi pi-fw pi-mobile', to: '/admin/uikit/button', class: 'rotated-icon' },
+            { label: 'Table', icon: 'pi pi-fw pi-table', to: '/admin/uikit/table' },
+            { label: 'List', icon: 'pi pi-fw pi-list', to: '/admin/uikit/list' },
+            { label: 'Tree', icon: 'pi pi-fw pi-share-alt', to: '/admin/uikit/tree' },
+            { label: 'Panel', icon: 'pi pi-fw pi-tablet', to: '/admin/uikit/panel' },
+            { label: 'Overlay', icon: 'pi pi-fw pi-clone', to: '/admin/uikit/overlay' },
+            { label: 'Media', icon: 'pi pi-fw pi-image', to: '/admin/uikit/media' },
+            { label: 'Menu', icon: 'pi pi-fw pi-bars', to: '/admin/uikit/menu' },
+            { label: 'Message', icon: 'pi pi-fw pi-comment', to: '/admin/uikit/message' },
+            { label: 'File', icon: 'pi pi-fw pi-file', to: '/admin/uikit/file' },
+            { label: 'Chart', icon: 'pi pi-fw pi-chart-bar', to: '/admin/uikit/charts' },
+            { label: 'Timeline', icon: 'pi pi-fw pi-calendar', to: '/admin/uikit/timeline' },
+            { label: 'Misc', icon: 'pi pi-fw pi-circle', to: '/admin/uikit/misc' }
         ]
     },
     {
         label: 'Pages',
         icon: 'pi pi-fw pi-briefcase',
-        to: '/pages',
+        to: '/admin/pages',
         items: [
             {
                 label: 'Landing',
                 icon: 'pi pi-fw pi-globe',
-                to: '/landing'
+                to: '/admin/demo/landing'
             },
             {
                 label: 'Auth',
@@ -110,11 +110,6 @@ const model = ref([
                         label: 'Login',
                         icon: 'pi pi-fw pi-sign-in',
                         to: '/auth/login'
-                    },
-                    {
-                        label: 'Login Alt',
-                        icon: 'pi pi-fw pi-sign-in',
-                        to: '/auth/login-alt'
                     },
                     {
                         label: 'Register',
@@ -136,7 +131,7 @@ const model = ref([
             {
                 label: 'Crud',
                 icon: 'pi pi-fw pi-pencil',
-                to: '/pages/crud'
+                to: '/admin/demo/crud'
             },
             {
                 label: 'Not Found',
@@ -146,7 +141,7 @@ const model = ref([
             {
                 label: 'Empty',
                 icon: 'pi pi-fw pi-circle-off',
-                to: '/pages/empty'
+                to: '/admin/demo/empty'
             }
         ]
     },
@@ -200,7 +195,7 @@ const model = ref([
             {
                 label: 'Documentation',
                 icon: 'pi pi-fw pi-book',
-                to: '/documentation'
+                to: '/admin/documentation'
             },
             {
                 label: 'View Source',
