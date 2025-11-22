@@ -68,6 +68,7 @@ const model = ref([
     {
         label: 'Administration',
         items: [
+            { label: 'Spaces', icon: 'pi pi-fw pi-book', to: '/admin/spaces' },
             { label: 'User Management', icon: 'pi pi-fw pi-users', to: '/admin/users' }
         ]
     },

@@ -192,11 +192,14 @@ async function saveSpace() {
 
   loading.value = true
   try {
+    const isPublic = currentSpace.value.visibility === 'public'
+
     if (isEditMode.value && currentSpace.value.id) {
       await spaceService.updateSpace(currentSpace.value.id, {
         name: currentSpace.value.name,
         description: currentSpace.value.description,
-        visibility: currentSpace.value.visibility as 'private' | 'public'
+        visibility: currentSpace.value.visibility as 'private' | 'public',
+        is_public: isPublic
       })
       toast.add({ severity: 'success', summary: 'Success', detail: 'Space updated successfully', life: 3000 })
     } else {
@@ -204,7 +207,8 @@ async function saveSpace() {
         currentSpace.value.key!,
         currentSpace.value.name!,
         currentSpace.value.description,
-        currentSpace.value.visibility as 'private' | 'public'
+        currentSpace.value.visibility as 'private' | 'public',
+        isPublic
       )
       toast.add({ severity: 'success', summary: 'Success', detail: 'Space created successfully', life: 3000 })
     }

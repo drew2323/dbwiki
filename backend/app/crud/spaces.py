@@ -19,7 +19,8 @@ def create_space(
     name: str,
     created_by: str,
     description: Optional[str] = None,
-    visibility: str = 'private'
+    visibility: str = 'private',
+    is_public: bool = False
 ) -> Space:
     space = Space(
         id=str(uuid.uuid4()),
@@ -27,6 +28,7 @@ def create_space(
         name=name,
         description=description,
         visibility=visibility,
+        is_public=is_public,
         created_by=created_by
     )
     db.add(space)
@@ -41,6 +43,7 @@ def update_space(
     name: Optional[str] = None,
     description: Optional[str] = None,
     visibility: Optional[str] = None,
+    is_public: Optional[bool] = None,
     home_page_id: Optional[str] = None
 ) -> Optional[Space]:
     space = db.query(Space).filter(Space.id == space_id).first()
@@ -53,11 +56,18 @@ def update_space(
             space.description = description
         if visibility is not None:
             space.visibility = visibility
+        if is_public is not None:
+            space.is_public = is_public
         if home_page_id is not None:
             space.home_page_id = home_page_id
         db.commit()
         db.refresh(space)
     return space
+
+def get_public_spaces(db: Session, skip: int = 0, limit: int = 100) -> List[Space]:
+    """Get all public spaces for discovery"""
+    return db.query(Space).filter(Space.is_public == True).offset(skip).limit(limit).all()
+
 
 def delete_space(db: Session, space_id: str) -> bool:
     """Delete a space (hard delete)"""

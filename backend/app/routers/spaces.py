@@ -26,6 +26,7 @@ class SpaceResponse(BaseModel):
     name: str
     description: str | None
     visibility: str
+    is_public: bool
     home_page_id: str | None
     created_by: str
     created_at: datetime
@@ -363,6 +364,7 @@ class CreateSpaceRequest(BaseModel):
     name: str
     description: str | None = None
     visibility: str = 'private'
+    is_public: bool = False
 
 
 @router.post("", response_model=SpaceResponse)
@@ -386,8 +388,14 @@ async def create_space(
         name=data.name,
         description=data.description,
         visibility=data.visibility,
+        is_public=data.is_public,
         created_by=current_user.id
     )
+
+    # Create root tree node for this space
+    from app.crud import tree_nodes as tree_crud
+    tree_crud.create_root_node(db, space.id)
+
     return space
 
 
@@ -396,6 +404,7 @@ class UpdateSpaceRequest(BaseModel):
     name: str | None = None
     description: str | None = None
     visibility: str | None = None
+    is_public: bool | None = None
     home_page_id: str | None = None
 
 
@@ -426,6 +435,7 @@ async def update_space(
         name=data.name,
         description=data.description,
         visibility=data.visibility,
+        is_public=data.is_public,
         home_page_id=data.home_page_id
     )
 
@@ -460,3 +470,18 @@ async def delete_space(
         raise HTTPException(status_code=404, detail="Space not found")
 
     return {"message": "Space deleted successfully"}
+
+
+# Public endpoints (no authentication required)
+@router.get("/public/discover", response_model=List[SpaceResponse])
+async def discover_public_spaces(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all public spaces for discovery.
+    No authentication required.
+    """
+    spaces = space_crud.get_public_spaces(db, skip=skip, limit=limit)
+    return spaces

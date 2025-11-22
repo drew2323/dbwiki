@@ -1,4 +1,14 @@
 <script setup>
+import { computed, onMounted } from 'vue';
+import { useAuthStore } from '@/stores/authStore';
+import { useRouter } from 'vue-router';
+
+const authStore = useAuthStore();
+const router = useRouter();
+
+const isAuthenticated = computed(() => authStore.isAuthenticated);
+const user = computed(() => authStore.user);
+
 function smoothScroll(id) {
     document.body.click();
     const element = document.getElementById(id);
@@ -9,6 +19,17 @@ function smoothScroll(id) {
         });
     }
 }
+
+function goToAdmin() {
+    router.push('/admin');
+}
+
+// Check authentication status on mount
+onMounted(async () => {
+    if (!authStore.initialized) {
+        await authStore.fetchUser();
+    }
+});
 </script>
 
 <template>
@@ -65,8 +86,16 @@ function smoothScroll(id) {
             </li>
         </ul>
         <div class="flex border-t lg:border-t-0 border-surface py-4 lg:py-0 mt-4 lg:mt-0 gap-2">
-            <Button label="Login" text as="router-link" to="/auth/login" rounded></Button>
-            <Button label="Register" to="/auth/login" rounded></Button>
+            <template v-if="!isAuthenticated">
+                <Button label="Login" text as="router-link" to="/auth/login" rounded></Button>
+                <Button label="Register" as="router-link" to="/auth/register" rounded></Button>
+            </template>
+            <template v-else>
+                <span class="flex items-center px-4 text-surface-700 dark:text-surface-300">
+                    Hello, {{ user?.name || user?.username }}
+                </span>
+                <Button label="Dashboard" @click="goToAdmin" rounded></Button>
+            </template>
         </div>
     </div>
 </template>

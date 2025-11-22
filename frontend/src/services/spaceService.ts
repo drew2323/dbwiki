@@ -8,6 +8,7 @@ export interface Space {
   name: string
   description?: string
   visibility: 'private' | 'public'
+  is_public: boolean
   home_page_id?: string
   created_by: string
   created_at: string
@@ -169,11 +170,12 @@ export const spaceService = {
     key: string,
     name: string,
     description?: string,
-    visibility: 'private' | 'public' = 'private'
+    visibility: 'private' | 'public' = 'private',
+    isPublic: boolean = false
   ): Promise<Space> => {
     const response = await axios.post(
       `${API_URL}`,
-      { key, name, description, visibility },
+      { key, name, description, visibility, is_public: isPublic },
       { withCredentials: true }
     )
     return response.data
@@ -189,6 +191,7 @@ export const spaceService = {
       name?: string
       description?: string
       visibility?: 'private' | 'public'
+      is_public?: boolean
       home_page_id?: string
     }
   ): Promise<Space> => {
@@ -208,6 +211,16 @@ export const spaceService = {
       `${API_URL}/${spaceId}`,
       { withCredentials: true }
     )
+    return response.data
+  },
+
+  /**
+   * Get all public spaces for discovery (no auth required)
+   */
+  getPublicSpaces: async (skip: number = 0, limit: number = 100): Promise<Space[]> => {
+    const response = await axios.get(`${API_URL}/public/discover`, {
+      params: { skip, limit }
+    })
     return response.data
   }
 }

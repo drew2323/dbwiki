@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 # (routers may read env vars at module level)
 load_dotenv()
 
-from app.routers import trades, positions, auth, spaces, users, auth_identities, roles
+from app.routers import trades, positions, auth, spaces, users, auth_identities, roles, pages, tree, attachments
 
 app = FastAPI(title="DBWIKI API", version="0.1.0")
 
@@ -35,6 +35,9 @@ app.include_router(users.router)
 app.include_router(auth_identities.router)
 app.include_router(roles.router)
 app.include_router(spaces.router)
+app.include_router(pages.router)
+app.include_router(tree.router)
+app.include_router(attachments.router)
 app.include_router(trades.router)
 app.include_router(positions.router)
 

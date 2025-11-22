@@ -3,7 +3,7 @@ import FeaturesWidget from '@/components/landing/FeaturesWidget.vue';
 import FooterWidget from '@/components/landing/FooterWidget.vue';
 import HeroWidget from '@/components/landing/HeroWidget.vue';
 import HighlightsWidget from '@/components/landing/HighlightsWidget.vue';
-import PricingWidget from '@/components/landing/PricingWidget.vue';
+import PublicSpacesWidget from '@/components/landing/PublicSpacesWidget.vue';
 import TopbarWidget from '@/components/landing/TopbarWidget.vue';
 </script>
 
@@ -14,9 +14,9 @@ import TopbarWidget from '@/components/landing/TopbarWidget.vue';
                 <TopbarWidget />
             </div>
             <HeroWidget />
+            <PublicSpacesWidget />
             <FeaturesWidget />
             <HighlightsWidget />
-            <PricingWidget />
             <FooterWidget />
         </div>
     </div>
