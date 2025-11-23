@@ -59,14 +59,26 @@
                             <i class="pi pi-sitemap text-primary"></i>
                             <span class="font-semibold">Pages</span>
                         </div>
-                        <Button
-                            icon="pi pi-times"
-                            text
-                            rounded
-                            size="small"
-                            severity="secondary"
-                            @click="showTree = false"
-                        />
+                        <div class="flex items-center gap-1">
+                            <Button
+                                v-if="canEdit"
+                                icon="pi pi-plus"
+                                text
+                                rounded
+                                size="small"
+                                severity="secondary"
+                                v-tooltip.bottom="'Create Root Page'"
+                                @click="emitCreateRootPage"
+                            />
+                            <Button
+                                icon="pi pi-times"
+                                text
+                                rounded
+                                size="small"
+                                severity="secondary"
+                                @click="showTree = false"
+                            />
+                        </div>
                     </div>
                     <div class="flex-1 overflow-y-auto p-3">
                         <slot name="tree"></slot>
@@ -146,6 +158,9 @@ import SpaceSelector from '@/components/cms/SpaceSelector.vue';
 
 const authStore = useAuthStore();
 
+// Emits
+const emit = defineEmits(['createRootPage']);
+
 // Layout state
 const showTree = ref(true);
 const showSidebar = ref(true);
@@ -168,6 +183,10 @@ provide('isEditing', isEditing);
 // Methods
 const toggleEditMode = () => {
     isEditing.value = !isEditing.value;
+};
+
+const emitCreateRootPage = () => {
+    emit('createRootPage');
 };
 
 // Responsive handling

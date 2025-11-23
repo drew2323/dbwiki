@@ -1,8 +1,9 @@
 <template>
-    <SpaceLayout>
+    <SpaceLayout @create-root-page="handleCreateRootPage">
         <!-- Page Tree (left sidebar) -->
         <template #tree>
             <PageTree
+                ref="pageTreeRef"
                 v-if="currentSpace"
                 :spaceId="currentSpace.id"
                 :spaceKey="currentSpace.key"
@@ -37,6 +38,9 @@ import PageTree from '@/components/cms/PageTree.vue';
 
 const route = useRoute();
 const authStore = useAuthStore();
+
+// Refs
+const pageTreeRef = ref();
 
 // State
 const currentSpace = ref<Space | null>(null);
@@ -97,6 +101,11 @@ const canEdit = computed(() => {
     // TODO: Check actual space permissions
     return authStore.user?.is_superuser || false;
 });
+
+// Methods
+const handleCreateRootPage = () => {
+    pageTreeRef.value?.createRootPage();
+};
 </script>
 
 <style scoped>

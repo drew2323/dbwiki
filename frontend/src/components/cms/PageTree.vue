@@ -1,18 +1,5 @@
 <template>
     <div class="page-tree">
-        <!-- Toolbar -->
-        <div v-if="canEdit" class="flex items-center justify-between mb-3 pb-3 border-b border-surface-200 dark:border-surface-700">
-            <h3 class="text-sm font-semibold text-surface-700 dark:text-surface-300">Pages</h3>
-            <Button
-                icon="pi pi-plus"
-                text
-                rounded
-                size="small"
-                @click="showCreateDialog = true"
-                v-tooltip.bottom="'Create Page'"
-            />
-        </div>
-
         <!-- Loading State -->
         <div v-if="loading" class="space-y-2">
             <Skeleton v-for="n in 5" :key="n" height="2rem"></Skeleton>
@@ -57,27 +44,45 @@
         >
             <template #default="slotProps">
                 <div
-                    class="flex items-center gap-2 py-1"
+                    class="flex items-center justify-between gap-2 py-1 w-full node-content-wrapper"
                     :draggable="canEdit"
                     @contextmenu.prevent="showContextMenu($event, slotProps.node)"
                 >
-                    <i
-                        :class="slotProps.node.icon || 'pi pi-file'"
-                        class="text-muted-color"
-                    ></i>
-                    <span
-                        :class="{
-                            'font-semibold': slotProps.node.key === currentPageId,
-                            'text-muted-color': slotProps.node.is_archived
-                        }"
-                    >
-                        {{ slotProps.node.label }}
-                    </span>
-                    <i
-                        v-if="slotProps.node.is_archived"
-                        class="pi pi-eye-slash text-xs text-muted-color"
-                        title="Archived"
-                    ></i>
+                    <!-- Left: Icon + Label -->
+                    <div class="flex items-center gap-2 flex-1 min-w-0">
+                        <i
+                            :class="slotProps.node.icon || 'pi pi-file'"
+                            class="text-muted-color flex-shrink-0"
+                        ></i>
+                        <span
+                            class="truncate"
+                            :class="{
+                                'font-semibold': slotProps.node.key === currentPageId,
+                                'text-muted-color': slotProps.node.is_archived
+                            }"
+                        >
+                            {{ slotProps.node.label }}
+                        </span>
+                        <i
+                            v-if="slotProps.node.is_archived"
+                            class="pi pi-eye-slash text-xs text-muted-color flex-shrink-0"
+                            title="Archived"
+                        ></i>
+                    </div>
+
+                    <!-- Right: Hover Action Button -->
+                    <div v-if="canEdit" class="node-actions flex-shrink-0">
+                        <Button
+                            icon="pi pi-plus"
+                            text
+                            rounded
+                            size="small"
+                            severity="secondary"
+                            class="action-button"
+                            v-tooltip.bottom="'Add child page'"
+                            @click.stop="openCreateDialogForNode(slotProps.node)"
+                        />
+                    </div>
                 </div>
             </template>
         </Tree>
@@ -386,6 +391,12 @@ const showContextMenu = (event: MouseEvent, node: any) => {
     contextMenu.value.show(event);
 };
 
+// Open create dialog for a specific node (child page)
+const openCreateDialogForNode = (node: any) => {
+    selectedContextNode.value = node;
+    showCreateDialog.value = true;
+};
+
 // Toggle archive status
 const toggleArchive = async (node: any) => {
     if (!node?.data?.page_id) return;
@@ -460,9 +471,16 @@ watch(
     }
 );
 
-// Expose reload method
+// Create root page (called from parent via ref)
+const createRootPage = () => {
+    selectedContextNode.value = null;
+    showCreateDialog.value = true;
+};
+
+// Expose methods
 defineExpose({
-    reload: loadTree
+    reload: loadTree,
+    createRootPage
 });
 </script>
 
@@ -477,10 +495,46 @@ defineExpose({
     padding: 0.25rem 0.5rem;
     border-radius: 6px;
     transition: all 0.2s;
+    display: flex;
+    align-items: center;
+}
+
+.page-tree :deep(.p-tree-node-content > div) {
+    width: 100%;
 }
 
 .page-tree :deep(.p-tree-node-content:hover) {
     background: var(--surface-100);
+}
+
+/* Node wrapper takes full width */
+.node-content-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+/* Hide action button by default on desktop */
+.node-actions {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+/* Show action button on hover (desktop) */
+.node-content-wrapper:hover .node-actions {
+    opacity: 1;
+}
+
+/* Always show on touch devices */
+@media (hover: none) {
+    .node-actions {
+        opacity: 1;
+    }
+}
+
+/* Subtle styling for action button */
+.action-button {
+    width: 1.75rem;
+    height: 1.75rem;
 }
 
 .page-tree :deep(.p-tree-node-content.p-tree-node-selectable:not(.p-disabled).p-tree-node-selected) {
