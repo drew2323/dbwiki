@@ -28,7 +28,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, provide } from 'vue';
+import { ref, computed, onMounted, provide, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/authStore';
 import { spaceService, type Space } from '@/services/spaceService';
@@ -43,13 +43,16 @@ const currentSpace = ref<Space | null>(null);
 const loading = ref(true);
 
 // Load space data
-onMounted(async () => {
+const loadSpace = async () => {
     // First, check authentication status
     if (!authStore.initialized) {
         await authStore.fetchUser();
     }
 
     const spaceKey = route.params.spaceKey as string;
+    console.log('Space.vue: Loading space with key:', spaceKey);
+
+    loading.value = true;
     try {
         // For now, we'll fetch from public spaces or user spaces
         const publicSpaces = await spaceService.getPublicSpaces();
@@ -65,10 +68,26 @@ onMounted(async () => {
         console.log('Space.vue: loaded currentSpace=', currentSpace.value);
     } catch (error) {
         console.error('Failed to load space:', error);
+        currentSpace.value = null;
     } finally {
         loading.value = false;
     }
+};
+
+onMounted(() => {
+    loadSpace();
 });
+
+// Watch for route changes to reload space
+watch(
+    () => route.params.spaceKey,
+    (newSpaceKey, oldSpaceKey) => {
+        if (newSpaceKey && newSpaceKey !== oldSpaceKey) {
+            console.log('Space.vue: Route changed from', oldSpaceKey, 'to', newSpaceKey);
+            loadSpace();
+        }
+    }
+);
 
 // Provide space context to child components
 provide('currentSpace', currentSpace);

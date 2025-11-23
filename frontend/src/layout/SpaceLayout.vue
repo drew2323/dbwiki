@@ -8,11 +8,7 @@
                         <i class="pi pi-home text-xl"></i>
                     </router-link>
                     <i class="pi pi-chevron-right text-color-secondary text-sm"></i>
-                    <div class="flex items-center gap-2">
-                        <i class="pi pi-book text-primary text-xl"></i>
-                        <span class="font-semibold text-lg">{{ currentSpace?.name || 'Loading...' }}</span>
-                        <Tag v-if="currentSpace?.is_public" icon="pi pi-globe" value="Public" severity="success" rounded />
-                    </div>
+                    <SpaceSelector :current-space="currentSpace" />
                 </div>
             </template>
 
@@ -146,7 +142,7 @@ import { ref, computed, inject, provide, onMounted, onUnmounted } from 'vue';
 import { useAuthStore } from '@/stores/authStore';
 import Button from 'primevue/button';
 import Toolbar from 'primevue/toolbar';
-import Tag from 'primevue/tag';
+import SpaceSelector from '@/components/cms/SpaceSelector.vue';
 
 const authStore = useAuthStore();
 

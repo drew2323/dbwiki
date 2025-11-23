@@ -445,6 +445,21 @@ onMounted(() => {
     loadTree();
 });
 
+// Watch for space changes and reload tree
+watch(
+    () => props.spaceId,
+    async (newSpaceId, oldSpaceId) => {
+        if (newSpaceId && newSpaceId !== oldSpaceId) {
+            console.log('PageTree: Space changed from', oldSpaceId, 'to', newSpaceId, '- reloading tree');
+            // Reset tree state to avoid UX issues with stale expanded/selected keys
+            selectedKeys.value = {};
+            expandedKeys.value = {};
+            // Reload tree for new space
+            await loadTree();
+        }
+    }
+);
+
 // Expose reload method
 defineExpose({
     reload: loadTree
