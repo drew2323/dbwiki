@@ -36,24 +36,19 @@
             v-model:selectionKeys="selectedKeys"
             @nodeSelect="onNodeSelect"
             class="w-full border-none"
-            @node-drag-start="onNodeDragStart"
-            @node-drag-enter="onNodeDragEnter"
-            @node-drag-leave="onNodeDragLeave"
-            @node-drag-end="onNodeDragEnd"
+            :dragdrop="canEdit"
+            draggableScope="pages"
+            droppableScope="pages"
             @node-drop="onNodeDrop"
         >
             <template #default="slotProps">
                 <div
                     class="flex items-center justify-between gap-2 py-1 w-full node-content-wrapper"
-                    :draggable="canEdit"
                     @contextmenu.prevent="showContextMenu($event, slotProps.node)"
+                    @click="onNodeSelect(slotProps.node)"
                 >
-                    <!-- Left: Icon + Label -->
+                    <!-- Left: Label + Archive Icon -->
                     <div class="flex items-center gap-2 flex-1 min-w-0">
-                        <i
-                            :class="slotProps.node.icon || 'pi pi-file'"
-                            class="text-muted-color flex-shrink-0"
-                        ></i>
                         <span
                             class="truncate"
                             :class="{
@@ -134,7 +129,6 @@ const error = ref<string | null>(null);
 const showCreateDialog = ref(false);
 const contextMenu = ref();
 const selectedContextNode = ref<any>(null);
-const draggedNode = ref<any>(null);
 
 // Current page from route
 const currentPageId = computed(() => {
@@ -287,9 +281,15 @@ const onNodeCollapse = (node: any) => {
 };
 
 const onNodeSelect = (node: any) => {
+    console.log('PageTree: onNodeSelect called with node:', node);
+    console.log('PageTree: node.data:', node.data);
     if (node.data?.page_id && node.data?.slug) {
         const spaceKey = route.params.spaceKey;
-        router.push(`/${spaceKey}/p/${node.data.page_id}-${node.data.slug}`);
+        const targetPath = `/${spaceKey}/p/${node.data.page_id}-${node.data.slug}`;
+        console.log('PageTree: Navigating to:', targetPath);
+        router.push(targetPath);
+    } else {
+        console.warn('PageTree: Missing page_id or slug in node.data:', node.data);
     }
 };
 
@@ -301,28 +301,11 @@ watch(() => route.params.pageIdSlug, async (newVal) => {
     }
 });
 
-// Drag and drop handlers
-const onNodeDragStart = (event: any) => {
-    if (!props.canEdit) return;
-    draggedNode.value = event.node;
-};
-
-const onNodeDragEnter = (event: any) => {
-    // Visual feedback could be added here
-};
-
-const onNodeDragLeave = (event: any) => {
-    // Clean up visual feedback
-};
-
-const onNodeDragEnd = (event: any) => {
-    draggedNode.value = null;
-};
-
+// Drag and drop handler
 const onNodeDrop = async (event: any) => {
-    if (!props.canEdit || !draggedNode.value) return;
+    if (!props.canEdit) return;
 
-    const droppedNode = draggedNode.value;
+    const droppedNode = event.dragNode;
     const targetNode = event.dropNode;
     const dropIndex = event.dropIndex;
 

@@ -425,6 +425,9 @@ const { isSaving, lastSaved, hasUnsavedChanges, saveNow } = useAutosave({
 
 // Load page data
 const loadPage = async () => {
+    console.log('PageView: loadPage() called, current pageIdSlug:', route.params.pageIdSlug);
+    console.log('PageView: computed pageId.value:', pageId.value);
+
     if (!pageId.value) {
         error.value = 'Invalid page ID';
         loading.value = false;
@@ -435,19 +438,27 @@ const loadPage = async () => {
         loading.value = true;
         error.value = null;
 
+        console.log('PageView: Fetching page with ID:', pageId.value);
         // Load page details
         page.value = await pageService.getPageById(pageId.value);
+        console.log('PageView: Loaded page:', page.value);
 
         // Load latest version if published
         try {
+            console.log('PageView: Loading versions for page:', pageId.value);
             const versions = await pageService.listVersions(pageId.value, 0, 1);
+            console.log('PageView: Found versions:', versions);
             if (versions.length > 0) {
                 // Fetch the full version with content
                 latestVersion.value = await pageService.getVersion(pageId.value, versions[0].id);
+                console.log('PageView: Loaded latestVersion:', latestVersion.value);
+            } else {
+                console.log('PageView: No versions, setting latestVersion to null');
+                latestVersion.value = null;
             }
         } catch (err) {
             // No versions yet, that's ok
-            console.log('No published versions yet');
+            console.log('PageView: No published versions yet (error)');
             latestVersion.value = null;
         }
 
@@ -701,9 +712,14 @@ const restoreVersion = async () => {
 };
 
 // Watch for route changes
-watch(() => route.params.pageIdSlug, () => {
+watch(() => route.params.pageIdSlug, (newVal, oldVal) => {
+    console.log('PageView: Route param changed from', oldVal, 'to', newVal);
+    console.log('PageView: Current route.name:', route.name);
     if (route.name === 'page-view') {
+        console.log('PageView: Calling loadPage()');
         loadPage();
+    } else {
+        console.warn('PageView: Skipping loadPage, route name is not page-view');
     }
 });
 
