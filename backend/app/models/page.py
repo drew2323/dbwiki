@@ -21,6 +21,7 @@ class PageCreate(PageBase):
     space_id: str
     parent_id: Optional[str] = Field(None, description="Parent tree node ID for placement")
     position: Optional[int] = Field(None, description="Position in tree (auto-calculated if not provided)")
+    template_id: Optional[str] = Field(None, description="Built-in template to prefill the draft (see GET /api/pages/templates)")
 
 
 class PageUpdate(BaseModel):
@@ -28,6 +29,29 @@ class PageUpdate(BaseModel):
     title: Optional[str] = Field(None, max_length=500)
     slug: Optional[str] = Field(None, max_length=500)
     is_archived: Optional[bool] = None
+
+
+class PageDuplicate(BaseModel):
+    """Schema for duplicating a page (next to the original)"""
+    title: Optional[str] = Field(None, max_length=500, description="Title of the copy (default: '<title> (copy)')")
+
+
+class FavoritePage(BaseModel):
+    """A starred page with enough info to link to it"""
+    page_id: str
+    title: str
+    slug: str
+    space_id: str
+    space_key: str
+    space_name: str
+
+
+class TemplateInfo(BaseModel):
+    """Built-in page template"""
+    id: str
+    name: str
+    description: str
+    icon: str
 
 
 class DraftUpdate(BaseModel):
@@ -102,6 +126,7 @@ class VersionResponse(BaseModel):
     content_json: Dict[str, Any]
     content_text: str
     author_id: str
+    author_name: Optional[str] = None
     created_at: datetime
     notes: Optional[str] = None
 
@@ -115,6 +140,7 @@ class VersionListItem(BaseModel):
     version_number: int
     title: str
     author_id: str
+    author_name: Optional[str] = None
     created_at: datetime
     notes: Optional[str] = None
 
@@ -253,6 +279,8 @@ class SearchResult(BaseModel):
     title: str
     slug: str
     space_id: str
+    space_key: Optional[str] = None
+    space_name: Optional[str] = None
     snippet: Optional[str] = Field(None, description="Highlighted text snippet")
     rank: float = Field(0.0, description="Search relevance score")
 

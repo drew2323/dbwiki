@@ -42,7 +42,21 @@
                 <template #title>
                     <div class="flex items-start justify-between gap-4">
                         <h1 class="text-3xl md:text-4xl font-bold">{{ page.title }}</h1>
-                        <Tag v-if="page.is_archived" icon="pi pi-eye-slash" value="Archived" severity="warn" />
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            <Tag v-if="page.is_archived" icon="pi pi-eye-slash" value="Archived" severity="warn" />
+                            <Button
+                                v-if="authStore.isAuthenticated"
+                                :icon="isStarred ? 'pi pi-star-fill' : 'pi pi-star'"
+                                text
+                                rounded
+                                :severity="isStarred ? 'warn' : 'secondary'"
+                                :aria-label="isStarred ? 'Remove from favorites' : 'Add to favorites'"
+                                :aria-pressed="isStarred"
+                                data-testid="favorite-toggle"
+                                v-tooltip.bottom="isStarred ? 'Remove from favorites' : 'Add to favorites'"
+                                @click="onToggleFavorite"
+                            />
+                        </div>
                     </div>
                 </template>
 
@@ -185,8 +199,9 @@
                                     <span class="font-semibold text-lg">Version {{ version.version_number }}</span>
                                     <Tag v-if="latestVersion?.id === version.id" value="Latest" severity="success" />
                                 </div>
-                                <div class="flex items-center gap-2 text-sm text-color-secondary mb-2">
+                                <div class="flex flex-wrap items-center gap-2 text-sm text-color-secondary mb-2">
                                     <Tag icon="pi pi-clock" :value="formatDate(version.created_at)" severity="secondary" />
+                                    <Tag v-if="version.author_name" icon="pi pi-user" :value="version.author_name" severity="secondary" />
                                 </div>
                                 <p v-if="version.notes" class="text-sm text-color-secondary italic mt-2">
                                     "{{ version.notes }}"
@@ -199,6 +214,16 @@
                                     size="small"
                                     outlined
                                     @click="viewVersion(version)"
+                                />
+                                <Button
+                                    v-if="versions.length > 1"
+                                    label="Compare"
+                                    icon="pi pi-arrow-right-arrow-left"
+                                    size="small"
+                                    outlined
+                                    severity="secondary"
+                                    data-testid="compare-version"
+                                    @click="openCompare(version)"
                                 />
                                 <Button
                                     v-if="canEdit && latestVersion?.id !== version.id"
@@ -222,6 +247,14 @@
                 <p class="text-sm text-color-secondary">Publish this page to create the first version</p>
             </div>
         </Dialog>
+
+        <!-- Compare Versions Dialog -->
+        <VersionDiffDialog
+            v-model:visible="showCompare"
+            :page-id="pageId"
+            :versions="versions"
+            :initial-to-id="compareToId"
+        />
 
         <!-- View Version Dialog -->
         <Dialog
@@ -321,6 +354,10 @@
                 <!-- Attachments -->
                 <PageAttachments
                     :page-id="pageId"
+                    :space-id="page.space_id"
+                    :can-edit="canEdit"
+                    :can-insert="canEdit && isEditing"
+                    @insert-image="insertImage"
                 />
             </div>
         </Teleport>
@@ -350,10 +387,18 @@ import TiptapEditor from '@/components/cms/TiptapEditor.vue';
 import PageOutline from '@/components/cms/PageOutline.vue';
 import PageBacklinks from '@/components/cms/PageBacklinks.vue';
 import PageAttachments from '@/components/cms/PageAttachments.vue';
+import VersionDiffDialog from '@/components/cms/VersionDiffDialog.vue';
+import { useFavorites } from '@/composables/useFavorites';
+import { renderTiptap } from '@/utils/renderTiptap';
+import { useCmsStore } from '@/stores/cmsStore';
+import { useRecentPages } from '@/composables/useRecentPages';
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const cms = useCmsStore();
+const { add: addRecentPage } = useRecentPages();
+const currentSpace = inject<any>('currentSpace', ref(null));
 const toast = useToast();
 
 // Inject edit mode from SpaceLayout
@@ -373,6 +418,8 @@ const showVersionView = ref(false);
 const showRestoreDialog = ref(false);
 const isRestoring = ref(false);
 const sidebarMounted = ref(false);
+const showCompare = ref(false);
+const compareToId = ref<string | null>(null);
 
 // Edit mode state
 const editorRef = ref<any>(null);
@@ -395,10 +442,9 @@ const pageId = computed(() => {
     return match ? match[1] : pageIdSlug.split('-')[0]; // Fallback to old logic
 });
 
-const canEdit = computed(() => {
-    // TODO: Check actual permissions
-    return authStore.user?.is_superuser || false;
-});
+// Edit rights for the current space, provided by Space.vue
+const spaceCanEdit = inject<any>('spaceCanEdit', null);
+const canEdit = computed(() => !!spaceCanEdit?.value);
 
 const breadcrumbItems = computed(() => {
     return breadcrumb.value.map(item => ({
@@ -462,6 +508,17 @@ const loadPage = async () => {
             latestVersion.value = null;
         }
 
+        // Remember for the "recent pages" list of the search palette
+        if (page.value && currentSpace?.value) {
+            addRecentPage({
+                id: page.value.id,
+                title: page.value.title,
+                slug: page.value.slug,
+                spaceKey: currentSpace.value.key,
+                spaceName: currentSpace.value.name
+            });
+        }
+
         // Load breadcrumb
         try {
             breadcrumb.value = await pageService.getBreadcrumb(pageId.value);
@@ -479,6 +536,35 @@ const loadPage = async () => {
     } finally {
         loading.value = false;
     }
+};
+
+// Compare a version with the one before it (the dialog lets the user pick other versions)
+const openCompare = (version: PageVersion) => {
+    compareToId.value = version.id;
+    showCompare.value = true;
+};
+
+// Favorites (star in the page header, logged-in users only)
+const { isFavorite, toggle: toggleFavorite, load: loadFavorites } = useFavorites();
+const isStarred = computed(() => isFavorite(pageId.value));
+const onToggleFavorite = async () => {
+    if (!page.value || !currentSpace?.value) return;
+    const starring = !isStarred.value;
+    try {
+        await toggleFavorite(page.value, currentSpace.value);
+        toast.add({ severity: 'success', summary: starring ? 'Added to favorites' : 'Removed from favorites', life: 1800 });
+    } catch (err: any) {
+        toast.add({ severity: 'error', summary: 'Favorite failed', detail: err.response?.data?.detail || 'Could not update favorites', life: 4000 });
+    }
+};
+
+// Insert an uploaded image at the cursor of the open editor
+const insertImage = (src: string, alt: string) => {
+    if (!editorRef.value?.insertImage) {
+        toast.add({ severity: 'info', summary: 'Open the editor first', detail: 'Switch to Edit Mode to insert images', life: 3000 });
+        return;
+    }
+    editorRef.value.insertImage(src, alt);
 };
 
 // Initialize edit mode with page data
@@ -501,66 +587,8 @@ const initializeEditMode = () => {
     }
 };
 
-// Render Tiptap JSON to HTML for view mode
-const renderContent = (json: any) => {
-    if (!json) return '';
-
-    let headingIndex = 0;
-
-    // Simple Tiptap JSON to HTML renderer
-    const renderNode = (node: any): string => {
-        if (!node) return '';
-
-        if (node.text) {
-            let text = node.text;
-            if (node.marks) {
-                for (const mark of node.marks) {
-                    if (mark.type === 'bold') text = `<strong>${text}</strong>`;
-                    if (mark.type === 'italic') text = `<em>${text}</em>`;
-                    if (mark.type === 'code') text = `<code>${text}</code>`;
-                    if (mark.type === 'strike') text = `<s>${text}</s>`;
-                    if (mark.type === 'link') {
-                        text = `<a href="${mark.attrs.href}" class="text-primary hover:underline">${text}</a>`;
-                    }
-                }
-            }
-            return text;
-        }
-
-        const children = node.content ? node.content.map(renderNode).join('') : '';
-
-        switch (node.type) {
-            case 'doc':
-                return children;
-            case 'paragraph':
-                return `<p>${children || '<br>'}</p>`;
-            case 'heading':
-                // Add ID to headings for outline navigation
-                const headingId = `heading-${headingIndex++}`;
-                return `<h${node.attrs?.level || 1} id="${headingId}">${children}</h${node.attrs?.level || 1}>`;
-            case 'bulletList':
-                return `<ul>${children}</ul>`;
-            case 'orderedList':
-                return `<ol>${children}</ol>`;
-            case 'listItem':
-                return `<li>${children}</li>`;
-            case 'codeBlock':
-                return `<pre><code>${children}</code></pre>`;
-            case 'blockquote':
-                return `<blockquote>${children}</blockquote>`;
-            case 'horizontalRule':
-                return '<hr>';
-            case 'image':
-                return `<img src="${node.attrs?.src}" alt="${node.attrs?.alt || ''}" />`;
-            case 'hardBreak':
-                return '<br>';
-            default:
-                return children;
-        }
-    };
-
-    return renderNode(json);
-};
+// Render Tiptap JSON to (escaped, safe) HTML for view mode
+const renderContent = (json: any) => renderTiptap(json);
 
 // Format date
 const formatDate = (dateStr: string) => {
@@ -723,6 +751,11 @@ watch(() => route.params.pageIdSlug, (newVal, oldVal) => {
     }
 });
 
+// Reload when another component (page tree rename/archive) changed this page
+watch(() => cms.pageRevision, () => {
+    if (!isEditing.value) loadPage();
+});
+
 // Watch for edit mode changes from parent
 watch(isEditing, (newValue, oldValue) => {
     if (newValue && page.value) {
@@ -800,6 +833,7 @@ onMounted(() => {
         sidebarMounted.value = !!sidebar;
     };
 
+    if (authStore.isAuthenticated) loadFavorites();
     checkSidebar();
     // Recheck after a brief delay to ensure layout is mounted
     setTimeout(checkSidebar, 100);
@@ -811,6 +845,35 @@ onMounted(() => {
 <style scoped>
 .page-content {
     line-height: 1.7;
+}
+
+.rendered-content :deep(ul) {
+    list-style: disc;
+    padding-left: 1.5rem;
+    margin: 0.5rem 0;
+}
+
+.rendered-content :deep(ol) {
+    list-style: decimal;
+    padding-left: 1.5rem;
+    margin: 0.5rem 0;
+}
+
+.rendered-content :deep(table) {
+    margin: 1rem 0;
+}
+
+.rendered-content :deep(th),
+.rendered-content :deep(td) {
+    border: 1px solid var(--p-content-border-color, var(--surface-border));
+    padding: 0.4rem 0.6rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+.rendered-content :deep(th) {
+    background: var(--p-surface-100, var(--surface-100));
+    font-weight: 600;
 }
 
 .rendered-content {

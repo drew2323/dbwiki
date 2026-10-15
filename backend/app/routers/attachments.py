@@ -1,20 +1,26 @@
 """
 Attachment management API endpoints.
-Handles file uploads with presigned URLs (ready for S3 or local storage).
+
+Upload flow used by the UI: POST /api/attachments/upload (multipart).
+A presign flow (S3-style) is kept for future object storage: POST /presign,
+then POST /{id}/upload.
+Files are served through GET /api/attachments/{id}/file so the same access
+rules as for pages apply (public spaces are readable without login).
 """
 from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
-import os
 import hashlib
+import os
 from pathlib import Path
 
 from app.database import get_db
-from app.dependencies.auth import get_current_user
-from app.models.db_models import User
+from app.dependencies.auth import get_current_user, get_current_user_optional
+from app.dependencies.access import require_space_read, require_space_write, user_can_write_space
+from app.models.db_models import User, Attachment
 from app.models.page import (
-    AttachmentCreate, AttachmentPresignRequest, AttachmentPresignResponse,
-    AttachmentResponse
+    AttachmentPresignRequest, AttachmentPresignResponse, AttachmentResponse
 )
 from app.crud import attachments as attachment_crud
 from app.crud import spaces as space_crud
@@ -28,143 +34,70 @@ router = APIRouter(prefix="/api/attachments", tags=["attachments"])
 # ============================================================================
 
 # Local storage path (update for production with S3)
-# Use /tmp for Docker compatibility, or env variable for production
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/tmp/uploads"))
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_MB", "25")) * 1024 * 1024
+CHUNK = 1024 * 1024
 
-# Create directory lazily on first use, not at import time
-def ensure_upload_dir():
+# Types that are safe to render inline in the browser; everything else downloads
+INLINE_MIME_TYPES = {
+    "image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf",
+}
+
+
+def ensure_upload_dir() -> Path:
     """Ensure upload directory exists"""
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     return UPLOAD_DIR
 
 
-def calculate_file_hash(file_path: Path) -> str:
-    """Calculate SHA256 hash of a file"""
-    sha256_hash = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        for byte_block in iter(lambda: f.read(4096), b""):
-            sha256_hash.update(byte_block)
-    return sha256_hash.hexdigest()
+def _storage_path(url: str) -> Path:
+    """Resolve the stored relative url ('/uploads/<path>') to a file inside UPLOAD_DIR."""
+    rel = url[len("/uploads/"):] if url.startswith("/uploads/") else url
+    full = (UPLOAD_DIR / rel).resolve()
+    if UPLOAD_DIR.resolve() not in full.parents:
+        raise HTTPException(status_code=400, detail="Invalid storage path")
+    return full
 
 
-# ============================================================================
-# Presigned Upload Endpoints (S3-style)
-# ============================================================================
-
-@router.post("/presign", response_model=AttachmentPresignResponse)
-async def request_presigned_upload(
-    presign_data: AttachmentPresignRequest,
-    space_id: str,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Request a presigned URL for file upload.
-    In production, this would generate an S3 presigned URL.
-    For now, returns a local upload endpoint.
-
-    Flow:
-    1. Client requests presigned URL with file metadata
-    2. Server creates attachment record with pending status
-    3. Client uploads directly to presigned URL
-    4. Client confirms upload, server updates attachment
-    """
-    # Verify space exists
-    space = space_crud.get_space_by_id(db, space_id)
-    if not space:
-        raise HTTPException(status_code=404, detail="Space not found")
-
-    # Ensure upload directory exists
-    upload_dir = ensure_upload_dir()
-
-    # Generate upload path
-    upload_path = attachment_crud.generate_upload_path(space_id, presign_data.filename)
-    full_path = upload_dir / upload_path
-
-    # Create directory if needed
-    full_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Create pending attachment record
-    attachment = attachment_crud.create_attachment(
-        db=db,
-        space_id=space_id,
-        url=f"/uploads/{upload_path}",  # Will be updated after upload
-        filename=presign_data.filename,
-        mime_type=presign_data.mime_type,
-        size_bytes=presign_data.size_bytes,
-        created_by=user.id,
-        page_id=None  # Will be linked later
-    )
-
-    # In production, generate S3 presigned URL here
-    # For now, return local upload endpoint
-    upload_url = f"/api/attachments/{attachment.id}/upload"
-
-    return AttachmentPresignResponse(
-        upload_url=upload_url,
-        attachment_id=attachment.id,
-        fields=None  # Would contain S3 form fields in production
-    )
+def _clean_filename(name: Optional[str]) -> str:
+    name = os.path.basename((name or "").replace("\\", "/")).strip()
+    return name or "file"
 
 
-@router.post("/{attachment_id}/upload", response_model=AttachmentResponse)
-async def upload_file(
-    attachment_id: str,
-    file: UploadFile = File(...),
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Upload file to local storage (or S3 in production).
-    This endpoint is used with the presigned upload flow.
-    """
-    # Get attachment record
+async def _save_upload(file: UploadFile, dest: Path) -> tuple[str, int]:
+    """Stream upload to `dest`, enforcing the size limit. Returns (sha256, size)."""
+    sha = hashlib.sha256()
+    size = 0
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(dest, "wb") as out:
+            while True:
+                chunk = await file.read(CHUNK)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)"
+                    )
+                sha.update(chunk)
+                out.write(chunk)
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise
+    return sha.hexdigest(), size
+
+
+def _attachment_or_404(db: Session, attachment_id: str) -> Attachment:
     attachment = attachment_crud.get_attachment_by_id(db, attachment_id)
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
-
-    # Verify user owns this attachment
-    if attachment.created_by != user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    # Ensure upload directory exists
-    upload_dir = ensure_upload_dir()
-
-    # Save file to local storage
-    upload_path = attachment_crud.generate_upload_path(
-        attachment.space_id,
-        attachment.filename
-    )
-    full_path = upload_dir / upload_path
-    full_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Write file
-    with open(full_path, "wb") as f:
-        content = await file.read()
-        f.write(content)
-
-    # Calculate hash
-    file_hash = calculate_file_hash(full_path)
-
-    # Check for duplicate
-    existing = attachment_crud.find_by_hash(db, file_hash)
-    if existing and existing.id != attachment_id:
-        # Delete duplicate, return existing
-        os.remove(full_path)
-        attachment_crud.delete_attachment(db, attachment_id)
-        return existing
-
-    # Update attachment with hash and final URL
-    attachment.sha256_hash = file_hash
-    attachment.url = f"/uploads/{upload_path}"
-    db.commit()
-    db.refresh(attachment)
-
     return attachment
 
 
 # ============================================================================
-# Direct Upload Endpoint (simpler alternative)
+# Upload endpoints
 # ============================================================================
 
 @router.post("/upload", response_model=AttachmentResponse)
@@ -176,80 +109,143 @@ async def direct_upload(
     db: Session = Depends(get_db)
 ):
     """
-    Direct file upload (simpler flow, no presigning).
-    Use this for small files or when presigning is not needed.
+    Direct multipart upload. Identical files within a space share one stored
+    copy (SHA256) but get their own attachment record.
     """
-    # Verify space exists
-    space = space_crud.get_space_by_id(db, space_id)
-    if not space:
-        raise HTTPException(status_code=404, detail="Space not found")
+    require_space_write(db, space_id, user)
 
-    # Verify page exists if provided
     if page_id:
         page = page_crud.get_page_by_id(db, page_id)
         if not page or page.space_id != space_id:
             raise HTTPException(status_code=404, detail="Page not found in this space")
 
-    # Ensure upload directory exists
+    filename = _clean_filename(file.filename)
     upload_dir = ensure_upload_dir()
+    rel = attachment_crud.generate_upload_path(space_id, filename)
+    full_path = upload_dir / rel
 
-    # Generate upload path
-    upload_path = attachment_crud.generate_upload_path(space_id, file.filename)
-    full_path = upload_dir / upload_path
-    full_path.parent.mkdir(parents=True, exist_ok=True)
+    file_hash, size = await _save_upload(file, full_path)
+    if size == 0:
+        full_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="Empty file")
 
-    # Save file
-    content = await file.read()
-    with open(full_path, "wb") as f:
-        f.write(content)
+    url = f"/uploads/{rel}"
+    existing = db.query(Attachment).filter(
+        Attachment.space_id == space_id, Attachment.sha256_hash == file_hash
+    ).first()
+    if existing and _storage_path(existing.url).exists():
+        full_path.unlink(missing_ok=True)  # reuse the stored copy
+        url = existing.url
 
-    # Calculate hash and size
-    file_hash = calculate_file_hash(full_path)
-    file_size = len(content)
-
-    # Check for duplicate
-    existing = attachment_crud.find_by_hash(db, file_hash)
-    if existing:
-        # Delete duplicate file
-        os.remove(full_path)
-        # Update page_id if needed
-        if page_id and not existing.page_id:
-            existing.page_id = page_id
-            db.commit()
-            db.refresh(existing)
-        return existing
-
-    # Create attachment record
-    attachment = attachment_crud.create_attachment(
+    return attachment_crud.create_attachment(
         db=db,
         space_id=space_id,
-        url=f"/uploads/{upload_path}",
-        filename=file.filename,
+        url=url,
+        filename=filename,
         mime_type=file.content_type or "application/octet-stream",
-        size_bytes=file_size,
+        size_bytes=size,
         created_by=user.id,
         page_id=page_id,
         sha256_hash=file_hash
     )
 
+
+@router.post("/presign", response_model=AttachmentPresignResponse)
+async def request_presigned_upload(
+    presign_data: AttachmentPresignRequest,
+    space_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Step 1 of the presigned flow: create a pending attachment record and
+    return the endpoint to upload the bytes to (an S3 URL in production).
+    """
+    require_space_write(db, space_id, user)
+    filename = _clean_filename(presign_data.filename)
+    rel = attachment_crud.generate_upload_path(space_id, filename)
+
+    attachment = attachment_crud.create_attachment(
+        db=db,
+        space_id=space_id,
+        url=f"/uploads/{rel}",
+        filename=filename,
+        mime_type=presign_data.mime_type,
+        size_bytes=presign_data.size_bytes,
+        created_by=user.id,
+        page_id=None
+    )
+    return AttachmentPresignResponse(
+        upload_url=f"/api/attachments/{attachment.id}/upload",
+        attachment_id=attachment.id,
+        fields=None
+    )
+
+
+@router.post("/{attachment_id}/upload", response_model=AttachmentResponse)
+async def upload_file(
+    attachment_id: str,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Step 2 of the presigned flow: store the bytes at the path recorded in step 1."""
+    attachment = _attachment_or_404(db, attachment_id)
+    if attachment.created_by != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if attachment.sha256_hash:
+        raise HTTPException(status_code=409, detail="Attachment already uploaded")
+
+    ensure_upload_dir()
+    file_hash, size = await _save_upload(file, _storage_path(attachment.url))
+    attachment.sha256_hash = file_hash
+    attachment.size_bytes = size
+    db.commit()
+    db.refresh(attachment)
     return attachment
 
 
 # ============================================================================
-# Attachment Management Endpoints
+# Reading
 # ============================================================================
+
+@router.get("/{attachment_id}/file")
+async def download_file(
+    attachment_id: str,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional)
+):
+    """Serve the file. Safe image/PDF types render inline, everything else downloads."""
+    attachment = _attachment_or_404(db, attachment_id)
+    require_space_read(db, attachment.space_id, user)
+
+    path = _storage_path(attachment.url)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File missing from storage")
+
+    inline = attachment.mime_type in INLINE_MIME_TYPES
+    return FileResponse(
+        path,
+        media_type=attachment.mime_type if inline else "application/octet-stream",
+        filename=attachment.filename,
+        content_disposition_type="inline" if inline else "attachment",
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+            "Cache-Control": "private, max-age=3600",
+        },
+    )
+
 
 @router.get("/{attachment_id}", response_model=AttachmentResponse)
 async def get_attachment(
     attachment_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
+    user: Optional[User] = Depends(get_current_user_optional)
 ):
-    """Get attachment by ID"""
-    attachment = attachment_crud.get_attachment_by_id(db, attachment_id)
-    if not attachment:
-        raise HTTPException(status_code=404, detail="Attachment not found")
-
+    """Get attachment metadata by ID"""
+    attachment = _attachment_or_404(db, attachment_id)
+    require_space_read(db, attachment.space_id, user)
     return attachment
 
 
@@ -257,11 +253,14 @@ async def get_attachment(
 async def list_page_attachments(
     page_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
+    user: Optional[User] = Depends(get_current_user_optional)
 ):
     """List all attachments for a page"""
-    attachments = attachment_crud.get_attachments_by_page(db, page_id)
-    return attachments
+    page = page_crud.get_page_by_id(db, page_id, include_archived=True)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    require_space_read(db, page.space_id, user)
+    return attachment_crud.get_attachments_by_page(db, page_id)
 
 
 @router.get("/space/{space_id}/list", response_model=List[AttachmentResponse])
@@ -270,40 +269,54 @@ async def list_space_attachments(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
+    user: Optional[User] = Depends(get_current_user_optional)
 ):
     """List all attachments in a space"""
-    attachments = attachment_crud.get_attachments_by_space(db, space_id, skip, limit)
-    return attachments
+    require_space_read(db, space_id, user)
+    return attachment_crud.get_attachments_by_space(db, space_id, skip, limit)
 
 
 @router.get("/space/{space_id}/orphaned", response_model=List[AttachmentResponse])
 async def list_orphaned_attachments(
     space_id: str,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """List attachments not linked to any page"""
-    attachments = attachment_crud.get_orphaned_attachments(db, space_id)
-    return attachments
+    require_space_write(db, space_id, user)
+    return attachment_crud.get_orphaned_attachments(db, space_id)
 
+
+@router.get("/space/{space_id}/stats")
+async def get_storage_stats(
+    space_id: str,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional)
+):
+    """Get storage usage statistics for a space"""
+    require_space_read(db, space_id, user)
+    return attachment_crud.get_storage_stats(db, space_id)
+
+
+# ============================================================================
+# Management
+# ============================================================================
 
 @router.patch("/{attachment_id}/link", response_model=AttachmentResponse)
 async def link_attachment_to_page(
     attachment_id: str,
-    page_id: Optional[str],
+    page_id: Optional[str] = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Link or unlink an attachment to/from a page.
-    Set page_id to null to unlink.
-    """
-    attachment = attachment_crud.update_attachment_page(db, attachment_id, page_id)
-    if not attachment:
-        raise HTTPException(status_code=404, detail="Attachment not found")
-
-    return attachment
+    """Link or unlink (page_id omitted) an attachment to/from a page of the same space."""
+    attachment = _attachment_or_404(db, attachment_id)
+    require_space_write(db, attachment.space_id, user)
+    if page_id:
+        page = page_crud.get_page_by_id(db, page_id)
+        if not page or page.space_id != attachment.space_id:
+            raise HTTPException(status_code=404, detail="Page not found in this space")
+    return attachment_crud.update_attachment_page(db, attachment_id, page_id)
 
 
 @router.delete("/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -312,35 +325,25 @@ async def delete_attachment(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Delete an attachment.
-    Note: This deletes the database record but not the file from storage.
-    """
-    attachment = attachment_crud.get_attachment_by_id(db, attachment_id)
-    if not attachment:
-        raise HTTPException(status_code=404, detail="Attachment not found")
-
-    # Verify user owns this attachment (or is admin)
-    if attachment.created_by != user.id and not user.is_superuser:
+    """Delete an attachment; the stored file goes too unless another record shares it."""
+    attachment = _attachment_or_404(db, attachment_id)
+    space = space_crud.get_space_by_id(db, attachment.space_id)
+    if attachment.created_by != user.id and not (space and user_can_write_space(db, user, space) and
+                                                (user.is_superuser or space.created_by == user.id
+                                                 or _is_space_admin(db, user, space.id))):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    success = attachment_crud.delete_attachment(db, attachment_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Attachment not found")
+    url = attachment.url
+    attachment_crud.delete_attachment(db, attachment_id)
 
-    # TODO: Delete file from storage in background task
+    if not db.query(Attachment).filter(Attachment.url == url).first():
+        try:
+            _storage_path(url).unlink(missing_ok=True)
+        except HTTPException:
+            pass
 
 
-# ============================================================================
-# Storage Statistics
-# ============================================================================
-
-@router.get("/space/{space_id}/stats")
-async def get_storage_stats(
-    space_id: str,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
-):
-    """Get storage usage statistics for a space"""
-    stats = attachment_crud.get_storage_stats(db, space_id)
-    return stats
+def _is_space_admin(db: Session, user: User, space_id: str) -> bool:
+    from app.crud import user_space_roles as usr_crud
+    role = usr_crud.get_user_role_in_space(db, user.id, space_id)
+    return bool(role and role.name.lower() in ("admin", "superuser"))

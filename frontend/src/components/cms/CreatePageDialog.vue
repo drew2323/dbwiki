@@ -7,6 +7,29 @@
         @hide="handleClose"
     >
         <div class="space-y-4">
+            <div v-if="templates.length > 1">
+                <label class="block text-sm font-medium mb-2">Template</label>
+                <div class="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Page template">
+                    <button
+                        v-for="tpl in templates"
+                        :key="tpl.id"
+                        type="button"
+                        role="radio"
+                        :aria-checked="selectedTemplate === tpl.id"
+                        class="template-card text-left p-3 rounded border flex items-start gap-2"
+                        :class="selectedTemplate === tpl.id ? 'selected' : ''"
+                        :data-testid="`template-${tpl.id}`"
+                        @click="selectedTemplate = tpl.id"
+                    >
+                        <i :class="tpl.icon" class="mt-1 text-primary"></i>
+                        <span>
+                            <span class="block font-medium text-sm">{{ tpl.name }}</span>
+                            <span class="block text-xs text-muted-color">{{ tpl.description }}</span>
+                        </span>
+                    </button>
+                </div>
+            </div>
+
             <div>
                 <label for="page-title" class="block text-sm font-medium mb-2">
                     Page Title *
@@ -86,7 +109,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { pageService, type TreeNode } from '@/services/pageService';
+import { pageService, type TreeNode, type PageTemplate } from '@/services/pageService';
 import { useToast } from 'primevue/usetoast';
 import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
@@ -125,6 +148,19 @@ const selectedParentId = ref<string | null>(props.defaultParentId);
 const isCreating = ref(false);
 const error = ref('');
 const showErrors = ref(false);
+const templates = ref<PageTemplate[]>([]);
+const selectedTemplate = ref('blank');
+
+// Templates are static, load them the first time the dialog opens
+watch(visible, async (isOpen) => {
+    if (isOpen && templates.value.length === 0) {
+        try {
+            templates.value = await pageService.listTemplates();
+        } catch (err) {
+            console.error('Failed to load page templates:', err);
+        }
+    }
+});
 
 // Build parent options from tree nodes
 const parentOptions = computed(() => {
@@ -171,7 +207,8 @@ const handleCreate = async () => {
             props.spaceId,
             title.value.trim(),
             selectedParentId.value || undefined,
-            slug.value.trim() || undefined
+            slug.value.trim() || undefined,
+            selectedTemplate.value !== 'blank' ? selectedTemplate.value : undefined
         );
 
         toast.add({
@@ -205,6 +242,7 @@ const handleClose = () => {
     // Reset form
     title.value = '';
     slug.value = '';
+    selectedTemplate.value = 'blank';
     selectedParentId.value = props.defaultParentId;
     error.value = '';
     showErrors.value = false;
@@ -215,6 +253,19 @@ const handleClose = () => {
 </script>
 
 <style scoped>
+.template-card {
+    background: var(--surface-0);
+    border-color: var(--surface-border, var(--p-content-border-color));
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+.template-card:hover {
+    border-color: var(--p-primary-color);
+}
+.template-card.selected {
+    border-color: var(--p-primary-color);
+    background: var(--p-highlight-background, var(--primary-50));
+}
 :deep(.p-dropdown) {
     max-width: 100%;
 }

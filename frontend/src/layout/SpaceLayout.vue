@@ -15,6 +15,16 @@
             <template #end>
                 <div class="flex items-center gap-2">
                     <Button
+                        icon="pi pi-search"
+                        label="Search"
+                        severity="secondary"
+                        text
+                        aria-label="Search pages (Ctrl+K)"
+                        data-testid="open-search"
+                        v-tooltip.bottom="'Search pages (Ctrl+K)'"
+                        @click="cms.openSearch()"
+                    />
+                    <Button
                         v-if="isAuthenticated && canEdit"
                         :label="isEditing ? 'View Mode' : 'Edit Mode'"
                         :icon="isEditing ? 'pi pi-eye' : 'pi pi-pencil'"
@@ -146,6 +156,10 @@
                 @click="showSidebar = true"
             />
         </div>
+
+        <!-- Notifications from the tree, page view, attachments (ToastService is app-wide) -->
+        <Toast />
+        <SearchPalette :space-id="currentSpace?.id" :space-key="currentSpace?.key" />
     </div>
 </template>
 
@@ -154,9 +168,13 @@ import { ref, computed, inject, provide, onMounted, onUnmounted } from 'vue';
 import { useAuthStore } from '@/stores/authStore';
 import Button from 'primevue/button';
 import Toolbar from 'primevue/toolbar';
+import Toast from 'primevue/toast';
 import SpaceSelector from '@/components/cms/SpaceSelector.vue';
+import SearchPalette from '@/components/cms/SearchPalette.vue';
+import { useCmsStore } from '@/stores/cmsStore';
 
 const authStore = useAuthStore();
+const cms = useCmsStore();
 
 // Emits
 const emit = defineEmits(['createRootPage']);
@@ -172,10 +190,8 @@ const currentSpace = inject<any>('currentSpace');
 
 // Computed
 const isAuthenticated = computed(() => authStore.isAuthenticated);
-const canEdit = computed(() => {
-    // TODO: Check if user has edit permissions in this space
-    return authStore.user?.is_superuser || false;
-});
+const spaceCanEdit = inject<any>('spaceCanEdit', null);
+const canEdit = computed(() => !!spaceCanEdit?.value);
 
 // Provide isEditing to child components
 provide('isEditing', isEditing);

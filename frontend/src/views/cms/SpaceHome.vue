@@ -52,8 +52,30 @@
                     </div>
                 </div>
 
+                <!-- Recent Activity -->
+                <div v-if="activity.length > 0" class="mb-8" data-testid="space-activity">
+                    <h2 class="text-2xl font-semibold mb-4">Recent Activity</h2>
+                    <ul class="activity-list">
+                        <li
+                            v-for="(event, i) in activity"
+                            :key="`${event.type}-${event.page_id}-${event.at}-${i}`"
+                            class="activity-item"
+                            data-testid="activity-item"
+                            @click="goToActivity(event)"
+                        >
+                            <i :class="event.type === 'published' ? 'pi pi-bookmark text-primary' : 'pi pi-plus-circle text-muted-color'"></i>
+                            <span class="min-w-0 flex-1 truncate">
+                                <strong>{{ event.user_name || 'Someone' }}</strong>
+                                {{ event.type === 'published' ? `published version ${event.version_number} of` : 'created' }}
+                                <span class="text-primary">{{ event.page_title }}</span>
+                            </span>
+                            <span class="text-sm text-muted-color flex-shrink-0">{{ formatDate(event.at) }}</span>
+                        </li>
+                    </ul>
+                </div>
+
                 <!-- Empty State -->
-                <div v-else class="text-center py-12">
+                <div v-else-if="recentPages.length === 0" class="text-center py-12">
                     <i class="pi pi-inbox text-6xl text-muted-color mb-4"></i>
                     <h2 class="text-2xl font-semibold mb-2">No Pages Yet</h2>
                     <p class="text-muted-color mb-6">
@@ -126,7 +148,7 @@ import { ref, onMounted, computed, watch, inject } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/authStore';
 import { pageService, type Page } from '@/services/pageService';
-import type { Space } from '@/services/spaceService';
+import { spaceService, type ActivityEvent } from '@/services/spaceService';
 import Button from 'primevue/button';
 import Card from 'primevue/card';
 import Skeleton from 'primevue/skeleton';
@@ -142,14 +164,13 @@ const space = inject<any>('currentSpace');
 // State
 const loading = ref(true);
 const recentPages = ref<Page[]>([]);
+const activity = ref<ActivityEvent[]>([]);
 const homePage = ref<Page | null>(null);
 const showCreateDialog = ref(false);
 
 // Computed
-const canEdit = computed(() => {
-    // TODO: Check actual permissions
-    return authStore.user?.is_superuser || false;
-});
+const spaceCanEdit = inject<any>('spaceCanEdit', null);
+const canEdit = computed(() => !!spaceCanEdit?.value);
 
 // Load space data
 const loadSpaceData = async () => {
@@ -171,15 +192,24 @@ const loadSpaceData = async () => {
         }
 
         // Load recent pages
-        const pages = await pageService.listPagesInSpace(space.value.id, 0, 6);
-        recentPages.value = pages.sort((a, b) =>
-            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-        );
+        const pages = await pageService.listPagesInSpace(space.value.id, 0, 100);
+        recentPages.value = pages
+            .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+            .slice(0, 6);
+
+        // Activity is a nice-to-have, never block the page on it
+        spaceService.getActivity(space.value.id, 12)
+            .then((events) => { activity.value = events; })
+            .catch((err) => console.error('Failed to load space activity:', err));
     } catch (err) {
         console.error('Failed to load space data:', err);
     } finally {
         loading.value = false;
     }
+};
+
+const goToActivity = (event: ActivityEvent) => {
+    router.push(`/${route.params.spaceKey}/p/${event.page_id}-${event.page_slug}`);
 };
 
 // Navigate to page
@@ -219,4 +249,28 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.activity-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--p-content-border-color, var(--surface-border));
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.activity-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.65rem 1rem;
+    cursor: pointer;
+}
+
+.activity-item + .activity-item {
+    border-top: 1px solid var(--p-content-border-color, var(--surface-border));
+}
+
+.activity-item:hover {
+    background: var(--p-surface-100, var(--surface-100));
+}
 </style>

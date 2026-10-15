@@ -31,6 +31,10 @@ ENV PATH=/home/appuser/.local/bin:$PATH
 # Copy application code
 COPY --chown=appuser:appuser . .
 
+# Upload directory (mounted as a volume in docker-compose so files survive restarts)
+RUN mkdir -p /app/uploads && chown appuser:appuser /app/uploads
+ENV UPLOAD_DIR=/app/uploads
+
 USER appuser
 
 # Expose port

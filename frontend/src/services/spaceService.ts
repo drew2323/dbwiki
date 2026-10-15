@@ -15,6 +15,21 @@ export interface Space {
   updated_at?: string
 }
 
+export interface SpaceDetail extends Space {
+  /** True when the current user may create/edit/delete content in this space */
+  can_edit: boolean
+}
+
+export interface ActivityEvent {
+  type: 'created' | 'published'
+  page_id: string
+  page_title: string
+  page_slug: string
+  version_number: number | null
+  user_name: string | null
+  at: string
+}
+
 export interface Role {
   id: string
   name: string
@@ -30,6 +45,25 @@ export interface UserSpaceAccess {
 }
 
 export const spaceService = {
+  /**
+   * Look a space up by its URL key (readable without login for public spaces).
+   * Includes whether the current user can edit it.
+   */
+  getActivity: async (spaceId: string, limit: number = 15): Promise<ActivityEvent[]> => {
+    const response = await axios.get(`${API_URL}/${spaceId}/activity`, {
+      params: { limit },
+      withCredentials: true
+    })
+    return response.data
+  },
+
+  getSpaceByKey: async (key: string): Promise<SpaceDetail> => {
+    const response = await axios.get(`${API_URL}/by-key/${encodeURIComponent(key)}`, {
+      withCredentials: true
+    })
+    return response.data
+  },
+
   /**
    * Get all spaces the current user has access to
    */

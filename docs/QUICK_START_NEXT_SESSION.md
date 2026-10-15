@@ -1,261 +1,112 @@
-# Quick Start Guide - Next Development Session
+# Quick Start Guide
 
-**Status:** Sprint 4 Complete ✅
-**Next:** Sprint 5 - Tiptap Editor
-**Updated:** November 21, 2025
+**Status:** All planned CMS features are implemented (see [CMS_IMPLEMENTATION_STATUS.md](CMS_IMPLEMENTATION_STATUS.md)).
+**Updated:** October 2026
 
 ---
 
-## 🚀 Getting Started in 5 Minutes
+## 🚀 Getting started in 5 minutes
 
-### 1. Verify Database Migration
+### 1. Database
 ```bash
 cd backend
-alembic current
-# Expected: e1f2g3h4i5j6 (head)
+cp .env.example .env        # set DATABASE_URL, JWT_SECRET_KEY, Google OAuth keys
+alembic upgrade head        # expected head: f1a2b3c4d5e6
 ```
 
-If not at correct version:
-```bash
-alembic upgrade head
-```
-
-### 2. Start Backend
+### 2. Backend (port 8000)
 ```bash
 cd backend
+pip install -r requirements.txt
 python -m uvicorn main:app --reload --port 8000
 ```
+API docs: http://localhost:8000/docs
 
-Visit http://localhost:8000/docs to verify API is running.
-
-### 3. Start Frontend
+### 3. Frontend (port 5173)
 ```bash
 cd frontend
+npm install
 npm run dev
 ```
 
-Visit http://localhost:5173 to see the landing page.
-
-### 4. Quick Test
-1. Go to http://localhost:5173
-2. Should see landing page with public spaces section
-3. If no spaces, login and create one at http://localhost:5173/admin
-4. Set a space to public, then verify it appears on landing page
-5. Click on a public space to test viewing experience
+### 4. First steps in the app
+1. Register at `/auth/register` and log in.
+2. Make yourself superuser: `UPDATE users SET is_superuser = true WHERE email = '...';`
+3. Create a space in `/admin/spaces` (tick *public* to see it on the landing page).
+4. Open `/<space-key>`, create a page (try a template), edit, publish, press `Ctrl/Cmd+K`.
 
 ---
 
-## 📖 What's Working Now
-
-### ✅ Backend (Port 8000)
-- **Database:** All CMS tables created (pages, versions, tree, backlinks, attachments)
-- **API Endpoints:** 25+ endpoints for pages, tree, attachments
-- **Features:** ETag concurrency, full-text search, gapped positioning
-
-**Key Endpoints:**
-- `GET /api/spaces/public/discover` - Public spaces
-- `GET /api/tree/space/{space_id}` - Page tree
-- `GET /api/pages/{page_id}` - Page details
-- `GET /api/pages/slug/{space_id}/{slug}` - Page by slug
-
-### ✅ Frontend (Port 5173)
-- **Routes:**
-  - `/` - Public landing page
-  - `/admin/*` - Admin dashboard (superuser only)
-  - `/:spaceKey` - Space home
-  - `/:spaceKey/p/:pageId-slug` - Page view
-
-- **Features:** Page tree navigation, breadcrumbs, view pages
-
----
-
-## 🎯 Sprint 5 Checklist (Next Session)
-
-### Install Dependencies
+## 🧪 Tests
 ```bash
-cd frontend
-npm install @tiptap/vue-3 @tiptap/starter-kit @tiptap/extension-link @tiptap/extension-image @tiptap/extension-table @tiptap/extension-code-block @tiptap/extension-heading
+cd backend && pip install -r requirements-dev.txt && pytest tests   # API + access control
+cd frontend && npm test                                             # renderer + diff unit tests
 ```
 
-### Files to Create
-1. `frontend/src/components/cms/TiptapEditor.vue` - Main editor component
-2. `frontend/src/components/cms/EditorToolbar.vue` - Formatting toolbar
-3. `frontend/src/composables/useAutosave.ts` - Autosave logic
+---
 
-### Files to Update
-1. `frontend/src/views/cms/PageView.vue` - Add edit mode with Tiptap
-2. `frontend/src/layout/SpaceLayout.vue` - Handle edit mode toggle
+## 🔑 Roles and access
+| Who | Read | Write |
+|---|---|---|
+| Anonymous | public spaces (published content only) | - |
+| Member `read` | spaces they belong to | - |
+| Member `edit` / `admin`, space creator, superuser | yes (incl. drafts, archived pages) | yes |
 
-### Key Features to Implement
-- ✅ Tiptap editor with basic extensions
-- ✅ Autosave with 3-10s debounce
-- ✅ ETag conflict detection
-- ✅ Image upload (drag/paste)
-- ✅ Edit/View mode toggle
-- ✅ Unsaved changes warning
+The frontend asks `GET /api/spaces/by-key/{key}` for `can_edit`.
 
 ---
 
-## 📂 Important File Locations
+## 📂 Important file locations
 
 ### Backend
 ```
 backend/app/
-├── routers/
-│   ├── pages.py          # Page CRUD + autosave
-│   ├── tree.py           # Tree operations
-│   └── attachments.py    # File uploads
-├── crud/
-│   ├── pages.py          # Page logic
-│   └── page_versions.py  # Version logic
-└── models/
-    ├── db_models.py      # SQLAlchemy models
-    └── page.py           # Pydantic schemas
+├── dependencies/access.py     # require_space_read / require_space_write
+├── routers/pages.py           # pages, drafts, versions, duplicate, favorites, search
+├── routers/tree.py            # tree + moves
+├── routers/attachments.py     # upload, serve, delete
+├── routers/spaces.py          # spaces, by-key lookup, activity feed
+├── crud/                      # DB logic (pages.py has slug + search logic)
+├── utils/page_templates.py    # built-in page templates
+└── models/                    # SQLAlchemy models + Pydantic schemas
+backend/tests/                 # pytest API tests
 ```
 
 ### Frontend
 ```
 frontend/src/
-├── views/cms/
-│   ├── Space.vue         # Space wrapper
-│   ├── SpaceHome.vue     # Space landing
-│   └── PageView.vue      # Page display
-├── components/cms/
-│   └── PageTree.vue      # Tree navigation
-├── layout/
-│   └── SpaceLayout.vue   # 3-column layout
-└── services/
-    ├── pageService.ts    # Page API calls
-    └── spaceService.ts   # Space API calls
+├── views/cms/                 # Space.vue, SpaceHome.vue, PageView.vue
+├── components/cms/            # PageTree, CreatePageDialog, SearchPalette,
+│                              # PageAttachments, VersionDiffDialog, TiptapEditor, ...
+├── composables/               # useAutosave, useFavorites, useRecentPages, ...
+├── utils/                     # renderTiptap.ts (safe HTML), diffTiptap.ts
+├── stores/cmsStore.ts         # cross-component refresh signals
+└── services/                  # pageService, spaceService, attachmentService
 ```
 
 ---
 
-## 🔑 Key Concepts
+## 🔑 Key concepts
 
-### ETag Concurrency
-```typescript
-// Get draft with ETag
-const { draft_json, draft_etag } = await pageService.getDraft(pageId)
+### ETag concurrency
+Draft autosave sends the last known ETag; on mismatch the API answers `409` and the editor offers a refresh.
 
-// Update with If-Match header
-try {
-  await pageService.updateDraft(pageId, content, text, draft_etag)
-} catch (err) {
-  if (err.response?.status === 409) {
-    // Conflict - show merge UI
-  }
-}
-```
+### Gapped positioning
+Tree nodes use positions 1024, 2048, ... so a node can be inserted without renumbering; the API rebalances when gaps run out.
 
-### Gapped Positioning
-```
-Position values: 1024, 2048, 3072, ...
-When inserting between nodes: use midpoint
-When gaps < 2: trigger rebalance
-```
-
-### Tree Structure
-```
-Root Sentinel (page_id = null)
-  ├── Page A (position: 1024)
-  │   ├── Page A1 (position: 1024)
-  │   └── Page A2 (position: 2048)
-  └── Page B (position: 2048)
-```
+### Rendering user content
+Never put page content into `v-html` without `renderTiptap()` - it escapes text and only allows
+http(s)/mailto/tel/relative URLs.
 
 ---
 
-## 🐛 Known Issues
-
-1. **Space Loading:** SpaceLayout tries public API first, should check auth
-2. **Permissions:** Always checks `is_superuser`, needs proper role checking
-3. **Content Rendering:** Basic HTML only, needs Tiptap renderer
-4. **No Create Page UI:** Placeholder in Sprint 4, implement in Sprint 6
+## 🐛 Known limitations
+- Search indexes the draft text, so editors find unpublished text; readers only see title matches and no snippets.
+- Uploaded files live on local disk (`UPLOAD_DIR`); use object storage for multi-instance deployments.
+- Optional ideas not implemented: comments, Meilisearch, real-time collaboration, export/import.
 
 ---
 
-## 📚 Reference Documentation
-
-- **Full Status:** `docs/CMS_IMPLEMENTATION_STATUS.md`
-- **Project Overview:** `CLAUDE.md`
-- **Architecture:** `docs/ARCHITECTURE.md`
-- **API Reference:** `docs/API.md`
-- **Authentication:** `docs/AUTHENTICATION.md`
-
----
-
-## 💡 Tips for Development
-
-### Debug Backend
-```bash
-# View logs
-tail -f backend/logs/*.log
-
-# Test API directly
-curl http://localhost:8000/api/spaces/public/discover
-
-# Check database
-psql -U user -d dbwiki
-\dt  # List tables
-SELECT * FROM pages LIMIT 5;
-```
-
-### Debug Frontend
-```javascript
-// In browser console
-localStorage.getItem('auth')  // Check auth state
-localStorage.getItem('currentSpaceId')  // Check space
-```
-
-### Common Commands
-```bash
-# Backend
-cd backend
-alembic revision -m "description"  # Create migration
-alembic upgrade head               # Run migrations
-python -m uvicorn main:app --reload
-
-# Frontend
-cd frontend
-npm run dev          # Start dev server
-npm run build        # Build for production
-npm run lint         # Lint code
-```
-
----
-
-## 🎨 UI/UX Notes
-
-### PrimeVue Components Used
-- Tree, Card, Button, Skeleton, Dialog, Breadcrumb
-- Toast service for notifications
-- Theme variables for styling
-
-### Design Principles
-- Compact, information-dense
-- Professional appearance
-- Consistent with PrimeVue theme
-- Responsive (mobile-friendly)
-
----
-
-## 📞 Need Help?
-
-**Check these first:**
-1. API docs: http://localhost:8000/docs
-2. Console errors in browser DevTools
-3. Network tab for API call failures
-4. Backend logs for Python errors
-
-**Common Issues:**
-- **401 Unauthorized:** Check if logged in
-- **404 Not Found:** Verify route exists
-- **409 Conflict:** ETag mismatch, refresh page
-- **500 Server Error:** Check backend logs
-
----
-
-**Ready to Continue?** → Start with Sprint 5 - Tiptap Editor!
-
-See `docs/CMS_IMPLEMENTATION_STATUS.md` for detailed Sprint 5 plan.
+## 📚 Reference documentation
+- [DEVELOPMENT.md](DEVELOPMENT.md), [ARCHITECTURE.md](ARCHITECTURE.md), [AUTHENTICATION.md](AUTHENTICATION.md)
+- [DEPLOYMENT.md](DEPLOYMENT.md), [UI_FRAMEWORK.md](UI_FRAMEWORK.md)

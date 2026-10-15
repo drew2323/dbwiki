@@ -29,6 +29,10 @@ services:
     restart: unless-stopped
     env_file:
       - ./backend/.env
+    environment:
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads-data:/app/uploads
     ports:
       - "8000:8000"
     depends_on:
@@ -83,6 +87,7 @@ services:
 
 volumes:
   postgres-data:
+  uploads-data:
 
 networks:
   dbwiki-network:
