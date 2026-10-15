@@ -1,171 +1,170 @@
-# DBWIKI
+# DBWiki
 
-Modern Wiki platform with Python FastAPI backend and Vue 3 TypeScript frontend, featuring Google OAuth authentication.
+A self-hosted wiki / CMS in the spirit of Confluence: spaces, a hierarchical page tree, a rich text editor with
+autosave, a draft → publish workflow with version history, attachments and full text search.
+Python FastAPI backend, Vue 3 + TypeScript frontend, PostgreSQL.
 
 ## 🚀 Features
 
-- **Wiki / CMS** - Spaces, page tree with drag & drop, Tiptap editor with autosave, draft/publish workflow,
-  version history with diff, templates, attachments, favorites, Ctrl/Cmd+K search, public and private spaces
-- **Google OAuth Authentication** - Secure login with Google accounts
-- **Real-time State Management** - Pinia stores with TypeScript
-- **Protected Routes** - Authentication guards for secure pages
-- **RESTful API** - FastAPI with automatic OpenAPI documentation
-- **Type Safety** - Full TypeScript on frontend, Pydantic on backend
+**Content**
+- **Spaces** (public or private) with a drag & drop **page tree**, breadcrumbs, outline and backlinks
+- **Tiptap editor**: headings, lists, tables, code, links, images; **autosave** every few seconds with
+  ETag conflict detection (HTTP 409 when someone else changed the draft)
+- **Draft / publish workflow**, version history, restore, and **version comparison** (line + word diff, authors)
+- **Page operations**: create from **templates**, rename, duplicate, archive or permanently delete (with sub-pages)
+- **Attachments**: upload / drag & drop, image thumbnails, insert into pages, per-space deduplication
+- **Favorites** and a per-space **activity feed**
 
-## 🛠 Tech Stack
+**Search**
+- **Ctrl/Cmd+K palette**: title + content search (prefix aware, ranked), scope "this space / all spaces",
+  favorites and recently opened pages
 
-### Backend
-- **FastAPI** - Modern Python web framework
-- **Pydantic** - Data validation with Python type hints
-- **AuthLib** - OAuth 2.0 client implementation
-- **python-jose** - JWT token handling
+**Users and access**
+- Email/password (bcrypt) and **Google OAuth**, multiple identities per user, JWT in httpOnly cookies
+- Users belong to spaces with a role: `read`, `edit`, `admin` (plus a global superuser flag)
+- Public spaces are readable without login (published content only); drafts and archived pages are editor-only
+- Admin area (`/admin`) for users, roles and spaces
 
-### Frontend
-- **Vue 3** - Progressive JavaScript framework
-- **TypeScript** - Type-safe development
-- **Vite** - Next generation frontend tooling
-- **Pinia** - State management with Composition API
-- **Axios** - HTTP client with interceptors
-- **Vue Router** - Client-side routing with guards
+## 🛠 Tech stack
 
-## 📁 Project Structure
+| Layer | Technology |
+|---|---|
+| Backend | FastAPI, SQLAlchemy 2.0, Alembic, Pydantic, AuthLib, python-jose, bcrypt |
+| Database | PostgreSQL 16 (full text search, JSONB drafts) |
+| Frontend | Vue 3, TypeScript, Vite, Pinia, Vue Router, PrimeVue 4, Tailwind CSS, Tiptap 3 |
+| Tests | pytest (API against real PostgreSQL), vitest (frontend units) |
+| Deployment | Docker Compose (nginx + backend + frontend + postgres), GitHub Actions |
+
+## 📁 Project structure
 
 ```
-v3trading/
+dbwiki/
 ├── backend/
 │   ├── app/
-│   │   ├── dependencies/    # Auth dependencies
-│   │   ├── models/          # Pydantic models
-│   │   ├── routers/         # API endpoints
-│   │   └── utils/           # Utilities (auth, mock data)
-│   ├── main.py
-│   ├── requirements.txt
-│   ├── .env.example
-│   └── .env                 # Your secrets (not in git)
-│
-└── frontend/
-    ├── src/
-    │   ├── components/      # Vue components
-    │   ├── composables/     # Composition functions
-    │   ├── router/          # Vue Router with auth guards
-    │   ├── services/        # API service layer
-    │   ├── stores/          # Pinia stores
-    │   ├── types/           # TypeScript types
-    │   └── views/           # Page components
-    ├── vite.config.ts
-    ├── tsconfig.json
-    └── package.json
+│   │   ├── routers/        # auth, users, roles, spaces, pages, tree, attachments, ...
+│   │   ├── crud/           # database logic
+│   │   ├── dependencies/   # auth + space access checks (access.py)
+│   │   ├── models/         # SQLAlchemy models + Pydantic schemas
+│   │   └── utils/          # auth helpers, page templates
+│   ├── alembic/versions/   # database migrations
+│   ├── tests/              # pytest API tests
+│   └── main.py
+├── frontend/
+│   └── src/
+│       ├── views/cms/      # Space, SpaceHome, PageView
+│       ├── components/cms/ # PageTree, TiptapEditor, SearchPalette, PageAttachments, VersionDiffDialog, ...
+│       ├── components/admin/, layout/, stores/, services/, composables/, utils/
+├── docs/                   # architecture, auth, deployment, development, status
+├── nginx/                  # reverse proxy config
+└── docker-compose.yml
 ```
+
+> The frontend still contains the PrimeVue/Sakai demo pages (`/admin/uikit/*`, `/admin/demo/*`);
+> the `trades` / `positions` backend routers are leftovers from the project the template came from.
 
 ## 🔧 Setup
 
 ### Prerequisites
-- Python 3.9+
-- Node.js 16+
-- Google Cloud Console project with OAuth credentials
+- Python 3.11+ (3.13 works), Node.js 18+ (22 recommended), PostgreSQL 14+
+- Optional: Google Cloud OAuth credentials for "Sign in with Google"
 
-### Google OAuth Setup
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create OAuth 2.0 credentials
-3. Add authorized JavaScript origins:
-   - `http://localhost:5174`
-   - `http://localhost:8000`
-4. Add authorized redirect URI:
-   - `http://localhost:8000/api/auth/callback`
-5. Copy Client ID and Client Secret
+### Database
+```bash
+createdb dbwiki      # or use any PostgreSQL database you like
+```
 
-### Backend Setup
+### Backend
 ```bash
 cd backend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Create .env file
-cp .env.example .env
-# Edit .env and add your Google OAuth credentials
-
-# Run server
+cp .env.example .env     # set DATABASE_URL, JWT_SECRET_KEY, (Google keys)
+alembic upgrade head     # create / update the schema
 python -m uvicorn main:app --reload --port 8000
 ```
 
-### Frontend Setup
+### Frontend
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Run development server
 npm run dev
 ```
 
-## 🌐 Access Points
+### Google OAuth (optional)
+1. Create OAuth 2.0 credentials in the [Google Cloud Console](https://console.cloud.google.com/)
+2. Authorized JavaScript origins: `http://localhost:5173`, `http://localhost:8000`
+3. Authorized redirect URI: `http://localhost:8000/api/auth/callback`
+4. Put client id/secret into `backend/.env`
 
-- **Frontend**: http://localhost:5174
-- **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs (Swagger UI)
-- **Alternative Docs**: http://localhost:8000/redoc
+### Environment variables (`backend/.env`)
+| Variable | Purpose | Default |
+|---|---|---|
+| `DATABASE_URL` | SQLAlchemy URL, e.g. `postgresql+psycopg://user:pw@localhost:5432/dbwiki` | local `dbwiki` DB |
+| `JWT_SECRET_KEY` | signs login cookies and sessions (min. 32 chars) | - |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth | - |
+| `BACKEND_URL`, `FRONTEND_URL` | used for OAuth redirects | `http://localhost:8000` / `:5173` |
+| `CORS_ORIGINS` | comma separated allowed origins | `http://localhost:5173` |
+| `UPLOAD_DIR` | where attachments are stored | `/tmp/uploads` (Docker: `/app/uploads` volume) |
+| `MAX_UPLOAD_MB` | max attachment size | `25` |
+| `SMTP_*` | email (verification / password reset) | - |
 
-## 📚 API Endpoints
+## 🌐 Access points
 
-### Authentication
-- `GET /api/auth/google` - Initiate Google OAuth flow
-- `GET /api/auth/callback` - OAuth callback handler
-- `GET /api/auth/me` - Get current user (protected)
-- `POST /api/auth/logout` - Logout user
+- **App**: http://localhost:5173
+- **API**: http://localhost:8000, interactive docs at http://localhost:8000/docs
 
-### Trading
-- `GET /api/trades` - List trades (paginated)
-- `GET /api/trades/{id}` - Get single trade
-- `POST /api/trades` - Create new trade
-- `PATCH /api/trades/{id}/cancel` - Cancel trade
+## 🎯 First steps
 
-### Positions
-- `GET /api/positions` - List all positions
-- `GET /api/positions/{symbol}` - Get position by symbol
-- `POST /api/positions/{symbol}/close` - Close position
+1. Register at `/auth/register` and log in.
+2. Make yourself superuser (the first user has to be promoted in the database):
+   `UPDATE users SET is_superuser = true WHERE email = 'you@example.com';`
+3. Open `/admin/spaces`, create a space (tick *public* to list it on the landing page).
+4. Open `/<space-key>`, create a page (pick a template), **Edit Mode** → write → **Publish**.
+5. Press **Ctrl/Cmd+K** to search; star pages to find them quickly.
 
-## 🔐 Environment Variables
+Keyboard shortcuts on a page: `Ctrl+E` edit, `Ctrl+S` save draft, `Ctrl+Shift+P` publish, `Ctrl+H` history.
 
-### Backend (`.env`)
-```env
-GOOGLE_CLIENT_ID=your-client-id
-GOOGLE_CLIENT_SECRET=your-client-secret
-JWT_SECRET_KEY=your-secret-key-min-32-chars
-JWT_ALGORITHM=HS256
-FRONTEND_URL=http://localhost:5174
+## 📚 API overview
+
+Full, interactive reference: `/docs`. Main groups:
+
+| Prefix | What |
+|---|---|
+| `/api/auth/*` | register, login, logout, me, Google OAuth, password reset |
+| `/api/users`, `/api/roles`, `/api/auth-identities` | administration |
+| `/api/spaces` | spaces, `GET /by-key/{key}` (with `can_edit`), `GET /{id}/activity`, memberships, public discovery |
+| `/api/pages` | create (optionally `template_id`), get, rename/archive (`PATCH`), delete, `POST /{id}/duplicate`, `GET /templates` |
+| `/api/pages/{id}/draft` | read / autosave draft (ETag, `If-Match`) |
+| `/api/pages/{id}/publish`, `/versions`, `/restore` | versions |
+| `/api/pages/search`, `/api/pages/favorites/me`, `/api/pages/{id}/favorite` | search and favorites |
+| `/api/tree/space/{id}`, `/api/tree/node/*` | page tree, move, reorder |
+| `/api/attachments/upload`, `/{id}/file`, `/page/{id}/list` | uploads and downloads |
+
+Read endpoints work without login for public spaces; write endpoints need the `edit` / `admin` role in the
+space (or being its creator / a superuser).
+
+## 🧪 Tests
+
+```bash
+# Backend: API + access control tests against a migrated PostgreSQL (DATABASE_URL)
+cd backend && pip install -r requirements-dev.txt && pytest tests
+
+# Frontend: unit tests (safe renderer, diff)
+cd frontend && npm test
 ```
 
-### Frontend (optional `.env`)
-```env
-VITE_API_BASE_URL=/api
-```
-
-## 🎯 Usage
-
-1. Start both backend and frontend servers
-2. Navigate to http://localhost:5174
-3. Click "Sign in with Google"
-4. Authorize the application
-5. After login, access the "Test API Integration" page
-6. View and interact with mock trades and positions
-
-## 🧪 Development Notes
-
-- **Mock Data**: All trading data is in-memory and resets on server restart
-- **User Storage**: Users are stored in-memory (not persisted)
-- **Authentication**: JWT tokens stored in httpOnly cookies (7-day expiration)
-- **CORS**: Configured for localhost development
-- **Auto-reload**: Both servers support hot-reloading during development
+The backend tests create uniquely named data, so a development database can be reused - never run them
+against production. GitHub Actions (`.github/workflows/tests.yml`) runs both suites plus a frontend build.
 
 ## 📖 Documentation
 
-For detailed documentation including architecture decisions, API examples, and troubleshooting, see [CLAUDE.MD](./CLAUDE.MD).
+- [docs/QUICK_START_NEXT_SESSION.md](./docs/QUICK_START_NEXT_SESSION.md) - quick start and file map
+- [docs/CMS_IMPLEMENTATION_STATUS.md](./docs/CMS_IMPLEMENTATION_STATUS.md) - what is implemented, bug history, optional ideas
+- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md), [docs/AUTHENTICATION.md](./docs/AUTHENTICATION.md),
+  [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md), [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md),
+  [docs/UI_FRAMEWORK.md](./docs/UI_FRAMEWORK.md), [docs/RELEASES.md](./docs/RELEASES.md)
+- [CLAUDE.MD](./CLAUDE.MD) - project notes for AI assisted development
 
 ## 🚢 Deployment
 
@@ -175,7 +174,7 @@ The project includes Docker support with multi-stage builds and GitHub Actions C
 
 #### Local Docker Build
 ```bash
-# Build and run with docker-compose
+# Build and run with docker-compose (migrations run automatically on backend start)
 docker-compose up -d
 
 # View logs
@@ -300,6 +299,9 @@ In Google Cloud Console, add to your OAuth credentials:
 9. Deploy and test
 
 **Detailed instructions:** See CLAUDE.MD "SSL/TLS Configuration" section for complete step-by-step guide including certificate auto-renewal setup.
+
+Attachments are stored in the `uploads-data` Docker volume (`UPLOAD_DIR=/app/uploads`); nginx allows
+request bodies up to 30 MB on `/api/`. Back up this volume together with the database.
 
 ### Manual Production Build
 
