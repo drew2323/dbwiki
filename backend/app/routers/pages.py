@@ -12,10 +12,10 @@ from app.dependencies.auth import get_current_user, get_current_user_optional
 from app.dependencies.access import (
     require_space_read, require_space_write, user_can_write_space, readable_space_ids
 )
-from app.models.db_models import User, Page
+from app.models.db_models import User, Page, PageFavorite, Space
 from app.models.page import (
     PageCreate, PageUpdate, PageResponse, PageDetailResponse, PageDuplicate,
-    TemplateInfo, DraftUpdate, DraftResponse, VersionPublish, VersionResponse,
+    TemplateInfo, FavoritePage, DraftUpdate, DraftResponse, VersionPublish, VersionResponse,
     VersionListItem, VersionRestore, SearchQuery, SearchResponse,
     SearchResult
 )
@@ -29,10 +29,15 @@ from app.crud import spaces as space_crud
 router = APIRouter(prefix="/api/pages", tags=["pages"])
 
 
-def _load_page(db: Session, page_id: str, include_archived: bool = False) -> Page:
-    page = page_crud.get_page_by_id(db, page_id, include_archived=include_archived)
+def _load_page(db: Session, page_id: str, user: Optional[User] = None) -> Page:
+    """Load a page; archived pages exist only for people who can edit the space."""
+    page = page_crud.get_page_by_id(db, page_id, include_archived=True)
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
+    if page.is_archived:
+        space = space_crud.get_space_by_id(db, page.space_id)
+        if not (user and space and user_can_write_space(db, user, space)):
+            raise HTTPException(status_code=404, detail="Page not found")
     return page
 
 
@@ -55,6 +60,59 @@ async def list_templates():
 # ============================================================================
 # Page CRUD Endpoints
 # ============================================================================
+
+@router.get("/favorites/me", response_model=List[FavoritePage])
+async def list_my_favorites(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """The current user's starred pages (only those they can still read), newest first."""
+    rows = db.query(Page, Space).join(PageFavorite, PageFavorite.page_id == Page.id) \
+        .join(Space, Space.id == Page.space_id) \
+        .filter(PageFavorite.user_id == user.id, Page.is_archived == False) \
+        .order_by(PageFavorite.created_at.desc()).all()  # noqa: E712
+
+    result = []
+    for page, space in rows:
+        try:
+            require_space_read(db, space.id, user)
+        except HTTPException:
+            continue  # lost access since starring
+        result.append(FavoritePage(
+            page_id=page.id, title=page.title, slug=page.slug,
+            space_id=space.id, space_key=space.key, space_name=space.name
+        ))
+    return result
+
+
+@router.put("/{page_id}/favorite", status_code=status.HTTP_204_NO_CONTENT)
+async def add_favorite(
+    page_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Star a page (idempotent)."""
+    page = _load_page(db, page_id, user)
+    require_space_read(db, page.space_id, user)
+    exists = db.query(PageFavorite).filter(
+        PageFavorite.user_id == user.id, PageFavorite.page_id == page_id).first()
+    if not exists:
+        db.add(PageFavorite(user_id=user.id, page_id=page_id))
+        db.commit()
+
+
+@router.delete("/{page_id}/favorite", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_favorite(
+    page_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Unstar a page (idempotent)."""
+    db.query(PageFavorite).filter(
+        PageFavorite.user_id == user.id, PageFavorite.page_id == page_id
+    ).delete()
+    db.commit()
+
 
 @router.post("", response_model=PageResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 @router.post("/", response_model=PageResponse, status_code=status.HTTP_201_CREATED)
@@ -123,7 +181,7 @@ async def get_page(
     """
     Get page by ID. Draft content is only included for users who can edit the space.
     """
-    page = _load_page(db, page_id)
+    page = _load_page(db, page_id, user)
     return _page_for_reader(db, page, user)
 
 
@@ -183,7 +241,7 @@ async def update_page(
     Update page metadata (title, slug, archive status).
     Does not affect draft content - use draft endpoint for that.
     """
-    existing = _load_page(db, page_id, include_archived=True)
+    existing = _load_page(db, page_id, user)
     require_space_write(db, existing.space_id, user)
 
     if page_data.title is not None and not page_data.title.strip():
@@ -215,7 +273,7 @@ async def delete_page(
     Delete a page together with all pages below it
     (soft delete = archive by default, hard delete if specified).
     """
-    existing = _load_page(db, page_id, include_archived=True)
+    existing = _load_page(db, page_id, user)
     require_space_write(db, existing.space_id, user)
     page_crud.delete_page(db, page_id, hard_delete=hard_delete)
 
@@ -231,7 +289,7 @@ async def duplicate_page(
     Duplicate a page (without its children) right after the original in the tree.
     The copy's draft is the original's draft, or its latest published content.
     """
-    src = _load_page(db, page_id)
+    src = _load_page(db, page_id, user)
     require_space_write(db, src.space_id, user)
 
     draft_json = src.draft_json
@@ -282,7 +340,7 @@ async def get_draft(
     """
     Get draft content with ETag for optimistic locking.
     """
-    page = _load_page(db, page_id)
+    page = _load_page(db, page_id, user)
     require_space_write(db, page.space_id, user)
 
     return {
@@ -310,7 +368,7 @@ async def update_draft(
     Returns:
         409 Conflict if ETag mismatch
     """
-    require_space_write(db, _load_page(db, page_id).space_id, user)
+    require_space_write(db, _load_page(db, page_id, user).space_id, user)
 
     # Use header If-Match or body if_match
     etag = if_match or draft_data.if_match
@@ -356,7 +414,7 @@ async def publish_page(
     Publish the current draft as a new version.
     Also updates backlinks based on content.
     """
-    page = _load_page(db, page_id)
+    page = _load_page(db, page_id, user)
     require_space_write(db, page.space_id, user)
 
     if not page.draft_json:
@@ -392,7 +450,7 @@ async def list_versions(
     """
     List all versions for a page, newest first.
     """
-    require_space_read(db, _load_page(db, page_id).space_id, user)
+    require_space_read(db, _load_page(db, page_id, user).space_id, user)
     versions = version_crud.get_versions_by_page(db, page_id, skip, limit)
     return versions
 
@@ -407,7 +465,7 @@ async def get_version(
     """
     Get a specific version by ID.
     """
-    require_space_read(db, _load_page(db, page_id).space_id, user)
+    require_space_read(db, _load_page(db, page_id, user).space_id, user)
     version = version_crud.get_version_by_id(db, version_id)
     if not version or version.page_id != page_id:
         raise HTTPException(status_code=404, detail="Version not found")
@@ -426,7 +484,7 @@ async def restore_version(
     Restore a version's content to the current draft.
     Does not create a new version - just updates the draft.
     """
-    require_space_write(db, _load_page(db, page_id).space_id, user)
+    require_space_write(db, _load_page(db, page_id, user).space_id, user)
     page = version_crud.restore_version_to_draft(
         db=db,
         page_id=page_id,
@@ -457,7 +515,7 @@ async def get_backlinks(
     """
     Get all pages that link to this page.
     """
-    require_space_read(db, _load_page(db, page_id).space_id, user)
+    require_space_read(db, _load_page(db, page_id, user).space_id, user)
     backlinks = backlink_crud.get_backlinks_to_page(db, page_id)
 
     # Enrich with source page info

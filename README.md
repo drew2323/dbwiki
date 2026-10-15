@@ -4,6 +4,8 @@ Modern Wiki platform with Python FastAPI backend and Vue 3 TypeScript frontend, 
 
 ## 🚀 Features
 
+- **Wiki / CMS** - Spaces, page tree with drag & drop, Tiptap editor with autosave, draft/publish workflow,
+  version history with diff, templates, attachments, favorites, Ctrl/Cmd+K search, public and private spaces
 - **Google OAuth Authentication** - Secure login with Google accounts
 - **Real-time State Management** - Pinia stores with TypeScript
 - **Protected Routes** - Authentication guards for secure pages

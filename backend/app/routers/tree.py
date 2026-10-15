@@ -9,8 +9,8 @@ from pydantic import BaseModel, ConfigDict
 
 from app.database import get_db
 from app.dependencies.auth import get_current_user, get_current_user_optional
-from app.dependencies.access import require_space_read, require_space_write
-from app.models.db_models import User
+from app.dependencies.access import require_space_read, require_space_write, user_can_write_space
+from app.models.db_models import User, Page
 from app.models.page import TreeNodeMove, TreeNodeReorder
 from app.crud import tree_nodes as tree_crud
 from app.crud import pages as page_crud
@@ -63,38 +63,38 @@ async def get_space_tree(
     If parent_id is provided, returns children of that node.
     Otherwise, returns ALL nodes in the space for client-side tree building.
     """
-    require_space_read(db, space_id, user)
+    space = require_space_read(db, space_id, user)
+    can_see_archived = bool(user and user_can_write_space(db, user, space))
 
-    # Get ALL nodes in the space (not just root level)
+    # Get ALL nodes in the space (not just root level) plus their pages in one query
     nodes = tree_crud.get_nodes_by_space(db, space_id)
+    pages = {
+        p.id: p for p in db.query(Page).filter(Page.space_id == space_id).all()
+    }
 
-    # Enrich with page info
-    result = []
+    # Readers never see archived pages (not even their titles)
+    visible = []
     for node in nodes:
-        node_data = {
-            "id": node.id,
-            "space_id": node.space_id,
-            "page_id": node.page_id,
-            "parent_id": node.parent_id,
-            "position": node.position,
-            "title": None,
-            "slug": None,
-            "is_archived": False,
-            "has_children": False
-        }
+        page = pages.get(node.page_id) if node.page_id else None
+        if page and page.is_archived and not can_see_archived:
+            continue
+        visible.append((node, page))
 
-        if node.page_id:
-            page = page_crud.get_page_by_id(db, node.page_id, include_archived=True)
-            if page:
-                node_data["title"] = page.title
-                node_data["slug"] = page.slug
-                node_data["is_archived"] = page.is_archived
+    parents_with_children = {node.parent_id for node, _ in visible if node.parent_id}
 
-        # Check if node has children
-        children = tree_crud.get_children(db, node.id)
-        node_data["has_children"] = len(children) > 0
-
-        result.append(TreeNodeResponse(**node_data))
+    result = []
+    for node, page in visible:
+        result.append(TreeNodeResponse(
+            id=node.id,
+            space_id=node.space_id,
+            page_id=node.page_id,
+            parent_id=node.parent_id,
+            position=node.position,
+            title=page.title if page else None,
+            slug=page.slug if page else None,
+            is_archived=page.is_archived if page else False,
+            has_children=node.id in parents_with_children
+        ))
 
     return result
 

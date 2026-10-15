@@ -214,6 +214,22 @@ class PageVersion(Base):
         UniqueConstraint('page_id', 'version_number', name='uq_page_version'),
     )
 
+    @property
+    def author_name(self):
+        """Display name of the author for history / diff views"""
+        if not self.author:
+            return None
+        return self.author.name or self.author.username
+
+
+class PageFavorite(Base):
+    """A page a user starred for quick access."""
+    __tablename__ = "page_favorites"
+
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    page_id = Column(String, ForeignKey("pages.id", ondelete="CASCADE"), primary_key=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
 
 class TreeNode(Base):
     """

@@ -28,6 +28,7 @@ export interface PageVersion {
   content_json: any
   content_text: string
   author_id: string
+  author_name?: string | null
   created_at: string
   notes: string | null
 }
@@ -42,6 +43,33 @@ export interface TreeNode {
   slug: string | null
   is_archived: boolean
   has_children: boolean
+}
+
+export interface PageTemplate {
+  id: string
+  name: string
+  description: string
+  icon: string
+}
+
+export interface SearchResult {
+  page_id: string
+  title: string
+  slug: string
+  space_id: string
+  space_key: string | null
+  space_name: string | null
+  snippet: string | null
+  rank: number
+}
+
+export interface FavoritePage {
+  page_id: string
+  title: string
+  slug: string
+  space_id: string
+  space_key: string
+  space_name: string
 }
 
 export interface Backlink {
@@ -64,7 +92,8 @@ export const pageService = {
     spaceId: string,
     title: string,
     parentId?: string,
-    slug?: string
+    slug?: string,
+    templateId?: string
   ): Promise<Page> => {
     const response = await axios.post(
       `${API_URL}/pages`,
@@ -72,8 +101,45 @@ export const pageService = {
         space_id: spaceId,
         title,
         slug,
-        parent_id: parentId
+        parent_id: parentId,
+        template_id: templateId
       },
+      { withCredentials: true }
+    )
+    return response.data
+  },
+
+  /**
+   * Built-in page templates
+   */
+  listTemplates: async (): Promise<PageTemplate[]> => {
+    const response = await axios.get(`${API_URL}/pages/templates`)
+    return response.data
+  },
+
+  /**
+   * The current user's starred pages
+   */
+  listFavorites: async (): Promise<FavoritePage[]> => {
+    const response = await axios.get(`${API_URL}/pages/favorites/me`, { withCredentials: true })
+    return response.data
+  },
+
+  addFavorite: async (pageId: string): Promise<void> => {
+    await axios.put(`${API_URL}/pages/${pageId}/favorite`, null, { withCredentials: true })
+  },
+
+  removeFavorite: async (pageId: string): Promise<void> => {
+    await axios.delete(`${API_URL}/pages/${pageId}/favorite`, { withCredentials: true })
+  },
+
+  /**
+   * Duplicate a page (next to the original, without children)
+   */
+  duplicatePage: async (pageId: string, title?: string): Promise<Page> => {
+    const response = await axios.post(
+      `${API_URL}/pages/${pageId}/duplicate`,
+      title ? { title } : {},
       { withCredentials: true }
     )
     return response.data
@@ -93,7 +159,9 @@ export const pageService = {
    * Get page by slug within a space
    */
   getPageBySlug: async (spaceId: string, slug: string): Promise<PageDetail> => {
-    const response = await axios.get(`${API_URL}/pages/slug/${spaceId}/${slug}`)
+    const response = await axios.get(`${API_URL}/pages/slug/${spaceId}/${slug}`, {
+      withCredentials: true
+    })
     return response.data
   },
 
@@ -259,7 +327,7 @@ export const pageService = {
     spaceId?: string,
     limit: number = 20,
     offset: number = 0
-  ): Promise<{ results: any[]; total: number; query: string; took_ms: number }> => {
+  ): Promise<{ results: SearchResult[]; total: number; query: string; took_ms: number }> => {
     const response = await axios.post(
       `${API_URL}/pages/search`,
       {

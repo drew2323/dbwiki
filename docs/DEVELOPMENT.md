@@ -50,6 +50,22 @@ npm install
    - Redirect: `http://localhost:8000/api/auth/callback`
 6. Copy Client ID and Secret to backend `.env`
 
+## Testing
+
+```bash
+# Backend API tests (real PostgreSQL from DATABASE_URL, migrated with `alembic upgrade head`)
+cd backend
+pip install -r requirements-dev.txt
+pytest tests
+
+# Frontend unit tests (safe HTML renderer, version diff)
+cd frontend
+npm test
+```
+
+The backend tests create uniquely named users/spaces, so a development database can be reused.
+Never point them at production data.
+
 ## Running the Application
 
 ### Development Mode

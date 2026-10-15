@@ -66,7 +66,19 @@
                     </div>
 
                     <!-- Right: Hover Action Button -->
-                    <div v-if="canEdit" class="node-actions flex-shrink-0">
+                    <div v-if="canEdit" class="node-actions flex-shrink-0 flex items-center">
+                        <Button
+                            icon="pi pi-ellipsis-h"
+                            text
+                            rounded
+                            size="small"
+                            severity="secondary"
+                            class="action-button"
+                            aria-label="Page actions"
+                            data-testid="page-actions"
+                            v-tooltip.bottom="'Page actions'"
+                            @click.stop="showContextMenu($event, slotProps.node)"
+                        />
                         <Button
                             icon="pi pi-plus"
                             text
@@ -84,6 +96,81 @@
 
         <!-- Context Menu -->
         <ContextMenu ref="contextMenu" :model="contextMenuItems" />
+
+        <!-- Rename Dialog -->
+        <Dialog
+            v-model:visible="showRenameDialog"
+            modal
+            header="Rename Page"
+            :style="{ width: '420px' }"
+        >
+            <label for="rename-title" class="block text-sm font-medium mb-2">Title</label>
+            <InputText
+                id="rename-title"
+                v-model="renameTitle"
+                class="w-full"
+                :invalid="!renameTitle.trim()"
+                data-testid="rename-input"
+                @keyup.enter="submitRename"
+                autofocus
+            />
+            <small class="text-muted-color block mt-2">
+                The page address is updated to match the new title.
+            </small>
+            <template #footer>
+                <Button label="Cancel" severity="secondary" outlined @click="showRenameDialog = false" />
+                <Button
+                    label="Rename"
+                    icon="pi pi-check"
+                    :loading="isWorking"
+                    :disabled="!renameTitle.trim()"
+                    data-testid="rename-confirm"
+                    @click="submitRename"
+                />
+            </template>
+        </Dialog>
+
+        <!-- Delete Dialog -->
+        <Dialog
+            v-model:visible="showDeleteDialog"
+            modal
+            header="Delete Page"
+            :style="{ width: '460px' }"
+        >
+            <p class="mb-3">
+                What should happen to <strong>{{ deleteTarget?.label }}</strong>
+                <span v-if="deleteDescendantCount > 0">
+                    and its {{ deleteDescendantCount }} sub-page{{ deleteDescendantCount === 1 ? '' : 's' }}
+                </span>?
+            </p>
+            <div class="flex flex-col gap-3">
+                <div class="flex items-start gap-2">
+                    <RadioButton v-model="deleteMode" inputId="del-archive" value="archive" />
+                    <label for="del-archive" class="cursor-pointer">
+                        <span class="font-medium">Archive</span>
+                        <span class="block text-sm text-muted-color">Hides the page from readers. You can unarchive it later.</span>
+                    </label>
+                </div>
+                <div class="flex items-start gap-2">
+                    <RadioButton v-model="deleteMode" inputId="del-hard" value="hard" />
+                    <label for="del-hard" class="cursor-pointer">
+                        <span class="font-medium text-red-500">Delete permanently</span>
+                        <span class="block text-sm text-muted-color">Removes the page, its versions and links. This cannot be undone.</span>
+                    </label>
+                </div>
+            </div>
+            <template #footer>
+                <Button label="Cancel" severity="secondary" outlined @click="showDeleteDialog = false" />
+                <Button
+                    :label="deleteMode === 'hard' ? 'Delete permanently' : 'Archive'"
+                    :icon="deleteMode === 'hard' ? 'pi pi-trash' : 'pi pi-eye-slash'"
+                    :severity="deleteMode === 'hard' ? 'danger' : 'primary'"
+                    :loading="isWorking"
+                    data-testid="delete-confirm"
+                    @click="submitDelete"
+                />
+            </template>
+        </Dialog>
 
         <!-- Create Page Dialog -->
         <CreatePageDialog
@@ -106,6 +193,10 @@ import Tree from 'primevue/tree';
 import Button from 'primevue/button';
 import Skeleton from 'primevue/skeleton';
 import ContextMenu from 'primevue/contextmenu';
+import Dialog from 'primevue/dialog';
+import InputText from 'primevue/inputtext';
+import RadioButton from 'primevue/radiobutton';
+import { useCmsStore } from '@/stores/cmsStore';
 import CreatePageDialog from './CreatePageDialog.vue';
 
 // Props
@@ -118,6 +209,7 @@ const props = defineProps<{
 const router = useRouter();
 const route = useRoute();
 const toast = useToast();
+const cms = useCmsStore();
 
 // State
 const treeNodes = ref<any[]>([]);
@@ -129,12 +221,20 @@ const error = ref<string | null>(null);
 const showCreateDialog = ref(false);
 const contextMenu = ref();
 const selectedContextNode = ref<any>(null);
+const showRenameDialog = ref(false);
+const renameTitle = ref('');
+const showDeleteDialog = ref(false);
+const deleteTarget = ref<any>(null);
+const deleteMode = ref<'archive' | 'hard'>('archive');
+const isWorking = ref(false);
 
 // Current page from route
 const currentPageId = computed(() => {
     const pageIdSlug = route.params.pageIdSlug as string;
     if (!pageIdSlug) return null;
-    return pageIdSlug.split('-')[0]; // Extract ID from "id-slug" format
+    // Route param is "<uuid>-<slug>"; a UUID itself contains dashes
+    const match = pageIdSlug.match(/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+    return match ? match[1] : pageIdSlug.split('-')[0];
 });
 
 // Context menu items
@@ -150,20 +250,17 @@ const contextMenuItems = computed(() => {
             }
         },
         {
+            label: 'Duplicate',
+            icon: 'pi pi-copy',
+            command: () => duplicateNode(selectedContextNode.value)
+        },
+        {
             separator: true
         },
         {
             label: 'Rename',
             icon: 'pi pi-pencil',
-            command: () => {
-                // TODO: Implement rename dialog
-                toast.add({
-                    severity: 'info',
-                    summary: 'Coming Soon',
-                    detail: 'Rename functionality will be available soon',
-                    life: 3000
-                });
-            }
+            command: () => openRenameDialog(selectedContextNode.value)
         },
         {
             label: selectedContextNode.value?.is_archived ? 'Unarchive' : 'Archive',
@@ -179,15 +276,7 @@ const contextMenuItems = computed(() => {
             label: 'Delete',
             icon: 'pi pi-trash',
             class: 'text-red-500',
-            command: () => {
-                // TODO: Implement delete confirmation
-                toast.add({
-                    severity: 'info',
-                    summary: 'Coming Soon',
-                    detail: 'Delete functionality will be available soon',
-                    life: 3000
-                });
-            }
+            command: () => openDeleteDialog(selectedContextNode.value)
         }
     ];
 });
@@ -222,6 +311,10 @@ const buildTreeStructure = (nodes: TreeNodeType[]): any[] => {
     const rootNodes: any[] = [];
 
     // Create node objects
+    // Readers must not see archived pages; editors see them greyed out
+    const visible = props.canEdit ? nodes : nodes.filter(n => !n.is_archived);
+    nodes = visible;
+
     nodes.forEach(node => {
         if (!node.page_id) return; // Skip root sentinel
 
@@ -409,6 +502,125 @@ const toggleArchive = async (node: any) => {
     }
 };
 
+// Pages below a tree node (any depth), used for the delete confirmation
+const countDescendants = (treeNodeId: string): number => {
+    const childrenOf = new Map<string, TreeNodeType[]>();
+    flatTreeNodes.value.forEach(n => {
+        if (n.parent_id && n.page_id) {
+            childrenOf.set(n.parent_id, [...(childrenOf.get(n.parent_id) || []), n]);
+        }
+    });
+    let count = 0;
+    const walk = (id: string) => {
+        (childrenOf.get(id) || []).forEach(child => { count++; walk(child.id); });
+    };
+    walk(treeNodeId);
+    return count;
+};
+const deleteDescendantCount = computed(() =>
+    deleteTarget.value?.data?.id ? countDescendants(deleteTarget.value.data.id) : 0
+);
+
+// Is `pageId` the open page, or below the given tree node?
+const isOpenPageWithin = (treeNodeId: string, pageId: string): boolean => {
+    if (!currentPageId.value) return false;
+    if (currentPageId.value === pageId) return true;
+    let node = flatTreeNodes.value.find(n => n.page_id === currentPageId.value);
+    while (node?.parent_id) {
+        if (node.parent_id === treeNodeId) return true;
+        node = flatTreeNodes.value.find(n => n.id === node!.parent_id);
+    }
+    return false;
+};
+
+const apiError = (err: any, fallback: string) => err.response?.data?.detail || fallback;
+
+// Rename
+const openRenameDialog = (node: any) => {
+    if (!node?.data?.page_id) return;
+    selectedContextNode.value = node;
+    renameTitle.value = node.label;
+    showRenameDialog.value = true;
+};
+
+const submitRename = async () => {
+    const node = selectedContextNode.value;
+    const title = renameTitle.value.trim();
+    if (!node?.data?.page_id || !title || isWorking.value) return;
+
+    isWorking.value = true;
+    try {
+        const page = await pageService.updatePage(node.data.page_id, { title });
+        showRenameDialog.value = false;
+        toast.add({ severity: 'success', summary: 'Page Renamed', detail: `"${page.title}"`, life: 2000 });
+
+        await loadTree();
+        if (currentPageId.value === page.id) {
+            // Slug follows the title, so move to the new address and refresh the open page
+            await router.replace(`/${route.params.spaceKey}/p/${page.id}-${page.slug}`);
+            cms.refreshPage();
+        }
+    } catch (err: any) {
+        toast.add({ severity: 'error', summary: 'Rename Failed', detail: apiError(err, 'Failed to rename page'), life: 5000 });
+    } finally {
+        isWorking.value = false;
+    }
+};
+
+// Delete / archive with confirmation
+const openDeleteDialog = (node: any) => {
+    if (!node?.data?.page_id) return;
+    selectedContextNode.value = node;
+    deleteTarget.value = node;
+    deleteMode.value = 'archive';
+    showDeleteDialog.value = true;
+};
+
+const submitDelete = async () => {
+    const node = deleteTarget.value;
+    if (!node?.data?.page_id || isWorking.value) return;
+
+    isWorking.value = true;
+    try {
+        const hard = deleteMode.value === 'hard';
+        const wasOpen = isOpenPageWithin(node.data.id, node.data.page_id);
+        await pageService.deletePage(node.data.page_id, hard);
+        showDeleteDialog.value = false;
+        toast.add({
+            severity: 'success',
+            summary: hard ? 'Page Deleted' : 'Page Archived',
+            detail: `"${node.label}"${deleteDescendantCount.value ? ` and ${deleteDescendantCount.value} sub-page(s)` : ''}`,
+            life: 3000
+        });
+
+        // Leave a page that no longer exists before reloading the tree around it
+        if (wasOpen && hard) {
+            await router.push(`/${route.params.spaceKey}`);
+        }
+        await loadTree();
+        if (wasOpen && !hard) {
+            cms.refreshPage();
+        }
+    } catch (err: any) {
+        toast.add({ severity: 'error', summary: 'Delete Failed', detail: apiError(err, 'Failed to delete page'), life: 5000 });
+    } finally {
+        isWorking.value = false;
+    }
+};
+
+// Duplicate next to the original and open the copy
+const duplicateNode = async (node: any) => {
+    if (!node?.data?.page_id) return;
+    try {
+        const copy = await pageService.duplicatePage(node.data.page_id);
+        toast.add({ severity: 'success', summary: 'Page Duplicated', detail: `"${copy.title}"`, life: 2500 });
+        await loadTree();
+        router.push(`/${route.params.spaceKey}/p/${copy.id}-${copy.slug}`);
+    } catch (err: any) {
+        toast.add({ severity: 'error', summary: 'Duplicate Failed', detail: apiError(err, 'Failed to duplicate page'), life: 5000 });
+    }
+};
+
 // Handle page created
 const handlePageCreated = async (page: any) => {
     // Store currently expanded keys before reload
@@ -433,6 +645,13 @@ const handlePageCreated = async (page: any) => {
         }
     });
 };
+
+// Other components (e.g. page view) can ask for a tree reload
+watch(() => cms.treeRevision, () => loadTree());
+// Archived pages are only shown to editors
+watch(() => props.canEdit, () => {
+    treeNodes.value = buildTreeStructure([...flatTreeNodes.value]);
+});
 
 // Load on mount
 onMounted(() => {

@@ -1,8 +1,8 @@
 # DBWiki CMS Implementation Status
 
-**Last Updated:** November 21, 2025
-**Current Phase:** Sprint 9 Complete - Full CMS Functional
-**Overall Completion:** ~95% (All core features implemented and working)
+**Last Updated:** October 2026
+**Current Phase:** Sprint 10 Complete - all planned CMS features implemented and tested
+**Overall Completion:** All planned features done; only optional "nice to have" ideas remain (see bottom)
 
 ---
 
@@ -577,77 +577,77 @@ All models use UUID string IDs, proper relationships, and cascade rules.
 
 ---
 
-## 🚧 Remaining Work
+## ✅ Sprint 10: Page operations, search, attachments, version diff, activity ✅
 
-### **Minor Enhancements & Polish**
+This sprint finished the former "Remaining Work" list and fixed bugs found while
+testing the app end to end.
 
-#### Still to Implement:
-1. **Page Operations**
-   - [ ] Rename page dialog (placeholder exists)
-   - [ ] Delete page confirmation (placeholder exists)
-   - [ ] Duplicate page feature
-   - [ ] Page templates
+### Page operations
+- Rename (tree menu): title and slug follow, open page + tree refresh, slug clashes get `-2`, `-3`...
+- Delete with confirmation: **archive** (default, restorable) or **delete permanently**; both
+  cascade to sub-pages. Archived pages are only visible to editors.
+- Duplicate (`POST /api/pages/{id}/duplicate`): copy of draft (or latest version) placed next to the original.
+- Templates (`GET /api/pages/templates`, `template_id` on create): blank, meeting notes, how-to,
+  decision record, research note. Templates are defined in `backend/app/utils/page_templates.py`.
+- Visible "…" action menu per tree node (right click still works).
 
-2. **Search Enhancement**
-   - [ ] Cmd+K: Global search palette
-   - [ ] Recent pages
-   - [ ] Quick navigation
-   - [ ] Meilisearch integration (optional)
+### Search (Ctrl/Cmd+K)
+- Palette in every space view: debounced search by title **and** content (prefix aware, ranked,
+  title matches first), keyboard navigation, "this space / all spaces" scope.
+- Empty query shows **favorites** and **recently opened pages** (stored in the browser).
+- Search only returns pages from spaces the caller may read; content snippets only for editors.
 
-3. **Attachments**
-   - [ ] File upload functionality
-   - [ ] Drag-drop upload
-   - [ ] Image thumbnails
-   - [ ] Attachment management UI
+### Attachments
+- Upload button + drag & drop, progress, size limit (`MAX_UPLOAD_MB`, default 25), image thumbnails,
+  download, delete, "insert into page" for images while editing.
+- Files are served through `GET /api/attachments/{id}/file` with the same access rules as pages;
+  only png/jpeg/gif/webp/pdf render inline, everything else downloads (`nosniff`, CSP sandbox).
+- Identical uploads within a space share one stored copy.
 
-4. **Version Comparison**
-   - [ ] Side-by-side diff view
-   - [ ] Change highlighting
-   - [ ] Author attribution
+### Version comparison and history
+- "Compare" on every version: line diff with word-level highlighting, +/- counters, author
+  attribution, "changes only" mode, free choice of the two versions.
 
-5. **Additional UX**
-   - [ ] Favorite pages
-   - [ ] Recent activity feed
-   - [ ] Page templates
-   - [ ] Comments system (optional)
+### Favorites and activity
+- Star pages (per user, `page_favorites` table, migration `f1a2b3c4d5e6`).
+- Space home shows recent activity (page created / version published, with authors).
 
-**Estimated:** 500-800 lines, 5-8 hours
+### Access control (new)
+- Read: public spaces are readable without login; private spaces need membership.
+  Drafts are never exposed to readers.
+- Write: superuser, space creator or members with the `admin` / `edit` role. `read` members cannot edit.
+- `GET /api/spaces/by-key/{key}` returns the space plus `can_edit` - the UI uses it instead of
+  "is superuser".
+- `PUT /api/spaces/{id}` now requires login and creator/admin rights. The space creator becomes
+  space admin. `visibility` and `is_public` are kept in sync.
+
+### Bugs fixed
+- Duplicate page titles caused HTTP 500 (unique slug per space is now generated).
+- Page + tree node are created in one transaction (a failed create left orphan pages).
+- Anonymous visitors got 401 on public spaces.
+- **Stored XSS** in the page renderer (text, links and image URLs were not escaped); tables were not rendered.
+- CMS views never showed toasts (`<Toast />` was only in the admin layout).
+- Page tree extracted only the first UUID segment as current page id (no auto-expand, console errors).
+- Attachment presign flow stored files at a different path than recorded; files were never served.
+- Tree endpoint did N+1 queries per node.
+
+### Tests
+- Backend: `cd backend && pip install -r requirements-dev.txt && pytest tests` (needs the migrated
+  PostgreSQL from `DATABASE_URL`; uses uniquely named data).
+- Frontend unit tests: `cd frontend && npm test` (renderer escaping, diff algorithm).
 
 ---
 
-### **Sprint 10: Advanced Features** (Optional)
+## 💡 Optional ideas (not started)
 
-**Goal:** Add advanced CMS capabilities
+These were never required for a complete wiki and are intentionally left out:
 
-**Possible Features:**
-1. **Meilisearch Integration**
-   - Docker service
-   - Index pages on publish
-   - Typo tolerance, faceting
-   - Search result highlighting
-
-2. **Real-time Collaboration**
-   - Yjs or similar
-   - Live cursors
-   - Presence indicators
-   - Conflict-free editing
-
-3. **Advanced Permissions**
-   - Page-level permissions
-   - Granular role system
-   - Approval workflows
-
-4. **Export/Import**
-   - Export space to Markdown
-   - Import from Notion/Confluence
-   - PDF export
-
-5. **Analytics**
-   - Page view tracking
-   - Popular pages
-   - Edit history heatmap
-
-**Estimated:** Varies, 10-20+ hours
+1. Comments on pages
+2. Meilisearch (typo tolerance, highlighting) - PostgreSQL search covers titles + content today
+3. Real-time collaboration (Yjs, live cursors) - ETag conflict detection covers concurrent edits
+4. Page-level permissions / approval workflows
+5. Export / import (Markdown, Notion, Confluence, PDF)
+6. Page view analytics
 
 ---
 

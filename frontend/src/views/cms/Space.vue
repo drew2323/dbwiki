@@ -2,6 +2,10 @@
     <SpaceLayout @create-root-page="handleCreateRootPage">
         <!-- Page Tree (left sidebar) -->
         <template #tree>
+            <div v-if="!loading && !currentSpace" class="text-center py-8 text-sm text-muted-color">
+                <i class="pi pi-lock text-3xl mb-2"></i>
+                <p>This space does not exist or you do not have access to it.</p>
+            </div>
             <PageTree
                 ref="pageTreeRef"
                 v-if="currentSpace"
@@ -32,7 +36,7 @@
 import { ref, computed, onMounted, provide, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/authStore';
-import { spaceService, type Space } from '@/services/spaceService';
+import { spaceService, type SpaceDetail } from '@/services/spaceService';
 import SpaceLayout from '@/layout/SpaceLayout.vue';
 import PageTree from '@/components/cms/PageTree.vue';
 
@@ -43,7 +47,7 @@ const authStore = useAuthStore();
 const pageTreeRef = ref();
 
 // State
-const currentSpace = ref<Space | null>(null);
+const currentSpace = ref<SpaceDetail | null>(null);
 const loading = ref(true);
 
 // Load space data
@@ -54,22 +58,11 @@ const loadSpace = async () => {
     }
 
     const spaceKey = route.params.spaceKey as string;
-    console.log('Space.vue: Loading space with key:', spaceKey);
 
     loading.value = true;
     try {
-        // For now, we'll fetch from public spaces or user spaces
-        const publicSpaces = await spaceService.getPublicSpaces();
-        currentSpace.value = publicSpaces.find(s => s.key === spaceKey) || null;
-
-        if (!currentSpace.value && authStore.isAuthenticated) {
-            // Try user spaces
-            const userSpaces = await spaceService.getMySpaces();
-            const userSpace = userSpaces.find(us => us.space.key === spaceKey);
-            currentSpace.value = userSpace?.space || null;
-        }
-
-        console.log('Space.vue: loaded currentSpace=', currentSpace.value);
+        // Works for public spaces without login and for private spaces the user may read
+        currentSpace.value = await spaceService.getSpaceByKey(spaceKey);
     } catch (error) {
         console.error('Failed to load space:', error);
         currentSpace.value = null;
@@ -93,14 +86,12 @@ watch(
     }
 );
 
+// Computed - edit rights come from the backend (superuser, creator or admin/edit role)
+const canEdit = computed(() => !!currentSpace.value?.can_edit && authStore.isAuthenticated);
+
 // Provide space context to child components
 provide('currentSpace', currentSpace);
-
-// Computed
-const canEdit = computed(() => {
-    // TODO: Check actual space permissions
-    return authStore.user?.is_superuser || false;
-});
+provide('spaceCanEdit', canEdit);
 
 // Methods
 const handleCreateRootPage = () => {

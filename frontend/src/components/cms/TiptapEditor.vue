@@ -185,8 +185,14 @@ const handleReload = () => {
 };
 
 // Expose conflict handler to parent
+// Insert an image node at the current cursor position
+const insertImage = (src: string, alt: string = '') => {
+    editor.value?.chain().focus().setImage({ src, alt }).run();
+};
+
 defineExpose({
-    handleConflict
+    handleConflict,
+    insertImage
 });
 
 // Cleanup

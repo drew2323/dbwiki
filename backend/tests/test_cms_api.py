@@ -300,3 +300,113 @@ def test_oversized_upload_is_rejected(admin, space, monkeypatch):
     from app.routers import attachments
     monkeypatch.setattr(attachments, "MAX_UPLOAD_BYTES", 10)
     assert upload(admin, space["id"], "big.txt", b"x" * 11, "text/plain").status_code == 413
+
+
+# ------------------------------------------------------------- space lookup
+
+def test_space_by_key_reports_edit_rights(admin, anon, space, private_space):
+    reader = make_user()
+    add_member(private_space["id"], reader, "read")
+    editor = make_user()
+    add_member(private_space["id"], editor, "edit")
+
+    r = anon.get(f"/api/spaces/by-key/{space['key']}")
+    assert r.status_code == 200 and r.json()["can_edit"] is False
+    assert admin.get(f"/api/spaces/by-key/{space['key']}").json()["can_edit"] is True
+
+    assert anon.get(f"/api/spaces/by-key/{private_space['key']}").status_code == 401
+    assert reader.get(f"/api/spaces/by-key/{private_space['key']}").json()["can_edit"] is False
+    assert editor.get(f"/api/spaces/by-key/{private_space['key']}").json()["can_edit"] is True
+    assert make_user().get(f"/api/spaces/by-key/{private_space['key']}").status_code == 403
+    assert anon.get("/api/spaces/by-key/nope-nope").status_code == 404
+
+
+def test_archived_pages_are_only_visible_to_editors(admin, anon, space):
+    page = create_page(admin, space["id"], "Old news")
+    assert admin.patch(f"/api/pages/{page['id']}", json={"is_archived": True}).status_code == 200
+
+    assert admin.get(f"/api/pages/{page['id']}").status_code == 200      # editors can still open it
+    assert admin.get(f"/api/pages/{page['id']}/versions").status_code == 200
+    assert anon.get(f"/api/pages/{page['id']}").status_code == 404       # readers cannot
+    assert anon.get(f"/api/pages/{page['id']}/versions").status_code == 404
+    assert admin.patch(f"/api/pages/{page['id']}", json={"is_archived": False}).status_code == 200
+    assert anon.get(f"/api/pages/{page['id']}").status_code == 200
+
+
+def test_tree_hides_archived_pages_from_readers_and_reports_children(admin, anon, space):
+    sid = space["id"]
+    parent = create_page(admin, sid, "Parent")
+    child = create_page(admin, sid, "Child", parent_id=node_of(admin, sid, parent["id"])["id"])
+    secret = create_page(admin, sid, "Hidden away")
+    admin.patch(f"/api/pages/{secret['id']}", json={"is_archived": True})
+
+    admin_nodes = {n["page_id"]: n for n in admin.get(f"/api/tree/space/{sid}").json() if n["page_id"]}
+    assert admin_nodes[secret["id"]]["is_archived"] is True
+    assert admin_nodes[parent["id"]]["has_children"] is True
+    assert admin_nodes[child["id"]]["has_children"] is False
+
+    anon_nodes = {n["page_id"]: n for n in anon.get(f"/api/tree/space/{sid}").json() if n["page_id"]}
+    assert secret["id"] not in anon_nodes
+    assert {parent["id"], child["id"]} <= set(anon_nodes)
+
+
+# ------------------------------------------------- favorites, activity, history
+
+def test_favorites_add_list_remove_and_access(admin, anon, space, private_space):
+    page = create_page(admin, space["id"], "Star me")
+    hidden = create_page(admin, private_space["id"], "Private star")
+    reader = make_user()
+
+    assert anon.get("/api/pages/favorites/me").status_code == 401
+    assert reader.put(f"/api/pages/{page['id']}/favorite").status_code == 204
+    assert reader.put(f"/api/pages/{page['id']}/favorite").status_code == 204  # idempotent
+    assert reader.put(f"/api/pages/{hidden['id']}/favorite").status_code == 403  # no access
+
+    favs = reader.get("/api/pages/favorites/me").json()
+    assert [f["page_id"] for f in favs] == [page["id"]]
+    assert favs[0]["space_key"] == space["key"]
+
+    assert reader.delete(f"/api/pages/{page['id']}/favorite").status_code == 204
+    assert reader.delete(f"/api/pages/{page['id']}/favorite").status_code == 204  # idempotent
+    assert reader.get("/api/pages/favorites/me").json() == []
+
+
+def test_favorites_disappear_when_page_is_archived_or_access_lost(admin, space):
+    page = create_page(admin, space["id"], "Will go")
+    admin.put(f"/api/pages/{page['id']}/favorite")
+    assert len(admin.get("/api/pages/favorites/me").json()) == 1
+    admin.patch(f"/api/pages/{page['id']}", json={"is_archived": True})
+    assert admin.get("/api/pages/favorites/me").json() == []
+
+
+def test_versions_carry_author_names(admin, space):
+    page = create_page(admin, space["id"], "History")
+    admin.put(f"/api/pages/{page['id']}/draft",
+              json={"draft_json": {"type": "doc", "content": []}, "draft_text": "x"})
+    version = admin.post(f"/api/pages/{page['id']}/publish", json={}).json()
+    assert version["author_name"]
+    listed = admin.get(f"/api/pages/{page['id']}/versions").json()
+    assert listed[0]["author_name"] == version["author_name"]
+
+
+def test_space_activity_feed(admin, anon, space, private_space):
+    page = create_page(admin, space["id"], "Feed page")
+    admin.put(f"/api/pages/{page['id']}/draft",
+              json={"draft_json": {"type": "doc", "content": []}, "draft_text": "x"})
+    admin.post(f"/api/pages/{page['id']}/publish", json={"notes": "n"})
+    draft_only = create_page(admin, space["id"], "Draft only")
+
+    events = anon.get(f"/api/spaces/{space['id']}/activity").json()
+    kinds = [(e["type"], e["page_id"]) for e in events]
+    assert ("published", page["id"]) in kinds
+    assert ("created", page["id"]) in kinds
+    assert ("created", draft_only["id"]) in kinds
+    assert all(e["type"] != "published" or e["page_id"] != draft_only["id"] for e in events)
+    assert [e["at"] for e in events] == sorted((e["at"] for e in events), reverse=True)
+    assert events[0]["user_name"]
+
+    assert len(anon.get(f"/api/spaces/{space['id']}/activity?limit=1").json()) == 1
+    assert anon.get(f"/api/spaces/{private_space['id']}/activity").status_code == 401
+
+    admin.patch(f"/api/pages/{page['id']}", json={"is_archived": True})
+    assert all(e["page_id"] != page["id"] for e in anon.get(f"/api/spaces/{space['id']}/activity").json())

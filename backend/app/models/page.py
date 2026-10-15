@@ -36,6 +36,16 @@ class PageDuplicate(BaseModel):
     title: Optional[str] = Field(None, max_length=500, description="Title of the copy (default: '<title> (copy)')")
 
 
+class FavoritePage(BaseModel):
+    """A starred page with enough info to link to it"""
+    page_id: str
+    title: str
+    slug: str
+    space_id: str
+    space_key: str
+    space_name: str
+
+
 class TemplateInfo(BaseModel):
     """Built-in page template"""
     id: str
@@ -116,6 +126,7 @@ class VersionResponse(BaseModel):
     content_json: Dict[str, Any]
     content_text: str
     author_id: str
+    author_name: Optional[str] = None
     created_at: datetime
     notes: Optional[str] = None
 
@@ -129,6 +140,7 @@ class VersionListItem(BaseModel):
     version_number: int
     title: str
     author_id: str
+    author_name: Optional[str] = None
     created_at: datetime
     notes: Optional[str] = None
 
