@@ -8,7 +8,8 @@ from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
 
 from app.database import get_db
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, get_current_user_optional
+from app.dependencies.access import require_space_read, require_space_write
 from app.models.db_models import User
 from app.models.page import TreeNodeMove, TreeNodeReorder
 from app.crud import tree_nodes as tree_crud
@@ -55,17 +56,14 @@ async def get_space_tree(
     space_id: str,
     parent_id: Optional[str] = None,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
+    user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Get tree structure for a space.
     If parent_id is provided, returns children of that node.
     Otherwise, returns ALL nodes in the space for client-side tree building.
     """
-    # Verify space exists
-    space = space_crud.get_space_by_id(db, space_id)
-    if not space:
-        raise HTTPException(status_code=404, detail="Space not found")
+    require_space_read(db, space_id, user)
 
     # Get ALL nodes in the space (not just root level)
     nodes = tree_crud.get_nodes_by_space(db, space_id)
@@ -105,7 +103,7 @@ async def get_space_tree(
 async def get_tree_node(
     node_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
+    user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Get a specific tree node by ID.
@@ -113,6 +111,7 @@ async def get_tree_node(
     node = tree_crud.get_node_by_id(db, node_id)
     if not node:
         raise HTTPException(status_code=404, detail="Tree node not found")
+    require_space_read(db, node.space_id, user)
 
     node_data = {
         "id": node.id,
@@ -143,11 +142,15 @@ async def get_tree_node(
 async def get_breadcrumb(
     page_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
+    user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Get breadcrumb trail for a page (all ancestors from root to page).
     """
+    page = page_crud.get_page_by_id(db, page_id, include_archived=True)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    require_space_read(db, page.space_id, user)
     breadcrumb = tree_crud.get_breadcrumb(db, page_id)
     return [BreadcrumbItem(**item) for item in breadcrumb]
 
@@ -170,6 +173,15 @@ async def move_node(
     Returns:
         400 Bad Request if attempting to create circular reference
     """
+    existing = tree_crud.get_node_by_id(db, node_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Tree node not found")
+    require_space_write(db, existing.space_id, user)
+    if move_data.parent_id:
+        new_parent = tree_crud.get_node_by_id(db, move_data.parent_id)
+        if not new_parent or new_parent.space_id != existing.space_id:
+            raise HTTPException(status_code=400, detail="Parent must be a node in the same space")
+
     try:
         node = tree_crud.move_node(
             db=db,
@@ -226,6 +238,7 @@ async def reorder_nodes(
     for update in reorder_data.updates:
         node = tree_crud.get_node_by_id(db, update["id"])
         if node:
+            require_space_write(db, node.space_id, user)
             node.position = update["position"]
 
     db.commit()
@@ -246,6 +259,7 @@ async def rebalance_subtree(
     if not node:
         raise HTTPException(status_code=404, detail="Tree node not found")
 
+    require_space_write(db, node.space_id, user)
     tree_crud.rebalance_positions(db, node_id)
     return {"success": True, "message": "Positions rebalanced"}
 
@@ -264,9 +278,11 @@ async def delete_node(
         delete_descendants: If True (default), cascade to children.
                            If False, reparent children to this node's parent.
     """
-    success = tree_crud.delete_node(db, node_id, delete_descendants)
-    if not success:
+    node = tree_crud.get_node_by_id(db, node_id)
+    if not node:
         raise HTTPException(status_code=404, detail="Tree node not found")
+    require_space_write(db, node.space_id, user)
+    tree_crud.delete_node(db, node_id, delete_descendants)
 
 
 # ============================================================================
@@ -277,11 +293,15 @@ async def delete_node(
 async def get_ancestors(
     node_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
+    user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Get all ancestor nodes (parent, grandparent, etc.) up to root.
     """
+    start = tree_crud.get_node_by_id(db, node_id)
+    if not start:
+        raise HTTPException(status_code=404, detail="Tree node not found")
+    require_space_read(db, start.space_id, user)
     ancestors = tree_crud.get_ancestors(db, node_id)
 
     result = []
@@ -314,7 +334,7 @@ async def get_ancestors(
 async def get_descendants(
     node_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
+    user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     Get all descendant nodes (children, grandchildren, etc.).
@@ -350,4 +370,8 @@ async def get_descendants(
 
         return result
 
+    start = tree_crud.get_node_by_id(db, node_id)
+    if not start:
+        raise HTTPException(status_code=404, detail="Tree node not found")
+    require_space_read(db, start.space_id, user)
     return get_all_descendants(node_id)

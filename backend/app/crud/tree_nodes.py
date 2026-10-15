@@ -135,10 +135,12 @@ def create_node(
     page_id: str,
     parent_id: Optional[str] = None,
     position: Optional[int] = None,
-    before_node_id: Optional[str] = None
+    before_node_id: Optional[str] = None,
+    commit: bool = True
 ) -> TreeNode:
     """
     Create a new tree node for a page.
+    With commit=False the node is only flushed (caller owns the transaction).
 
     Args:
         space_id: Space ID
@@ -166,6 +168,9 @@ def create_node(
         position=position
     )
     db.add(node)
+    if not commit:
+        db.flush()
+        return node
     db.commit()
     db.refresh(node)
 

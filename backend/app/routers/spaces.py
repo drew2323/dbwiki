@@ -4,12 +4,14 @@ Allows users to manage their space access and switch between spaces.
 """
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 from app.database import get_db
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, get_current_user_optional
+from app.dependencies.access import require_space_read
+from app.crud import roles as role_crud
 from app.crud import user_space_roles as usr_crud
 from app.crud import spaces as space_crud
 from app.models.db_models import User, Space, Role
@@ -350,13 +352,11 @@ async def list_admin_spaces(
 @router.get("/{space_id}", response_model=SpaceResponse)
 async def get_space(
     space_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_current_user_optional)
 ):
-    """Get a specific space by ID"""
-    space = space_crud.get_space_by_id(db, space_id)
-    if not space:
-        raise HTTPException(status_code=404, detail="Space not found")
-    return space
+    """Get a specific space by ID (public spaces need no login)"""
+    return require_space_read(db, space_id, user)
 
 
 class CreateSpaceRequest(BaseModel):
@@ -382,19 +382,27 @@ async def create_space(
             detail=f"Key '{data.key}' is already taken"
         )
 
+    # visibility and is_public describe the same thing - keep them in sync
+    is_public = data.is_public or data.visibility == 'public'
+
     space = space_crud.create_space(
         db=db,
         key=data.key,
         name=data.name,
         description=data.description,
-        visibility=data.visibility,
-        is_public=data.is_public,
+        visibility='public' if is_public else 'private',
+        is_public=is_public,
         created_by=current_user.id
     )
 
     # Create root tree node for this space
     from app.crud import tree_nodes as tree_crud
     tree_crud.create_root_node(db, space.id)
+
+    # The creator manages the space they just made
+    admin_role = role_crud.get_role_by_name(db, "admin")
+    if admin_role and not current_user.is_superuser:
+        usr_crud.add_user_to_space(db, current_user.id, space.id, admin_role.id)
 
     return space
 
@@ -412,12 +420,18 @@ class UpdateSpaceRequest(BaseModel):
 async def update_space(
     space_id: str,
     data: UpdateSpaceRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update a space"""
+    """Update a space (superuser, creator or space admin)"""
     space = space_crud.get_space_by_id(db, space_id)
     if not space:
         raise HTTPException(status_code=404, detail="Space not found")
+
+    role = usr_crud.get_user_role_in_space(db, current_user.id, space_id)
+    if not (current_user.is_superuser or space.created_by == current_user.id
+            or (role and role.name.lower() in ("admin", "superuser"))):
+        raise HTTPException(status_code=403, detail="Only space creator or admin can update the space")
 
     # Check if new key conflicts
     if data.key and data.key != space.key:
@@ -428,14 +442,21 @@ async def update_space(
                 detail=f"Key '{data.key}' is already taken"
             )
 
+    # Keep visibility and is_public in sync; whichever field was sent wins
+    visibility, is_public = data.visibility, data.is_public
+    if is_public is not None:
+        visibility = 'public' if is_public else 'private'
+    elif visibility is not None:
+        is_public = visibility == 'public'
+
     updated_space = space_crud.update_space(
         db=db,
         space_id=space_id,
         key=data.key,
         name=data.name,
         description=data.description,
-        visibility=data.visibility,
-        is_public=data.is_public,
+        visibility=visibility,
+        is_public=is_public,
         home_page_id=data.home_page_id
     )
 
@@ -457,7 +478,7 @@ async def delete_space(
     # Check if user is creator or admin in the space
     is_creator = space.created_by == current_user.id
     current_role = usr_crud.get_user_role_in_space(db, current_user.id, space_id)
-    is_admin = current_role and current_role.name == "Admin"
+    is_admin = current_role and current_role.name.lower() in ("admin", "superuser")
 
     if not (is_creator or is_admin):
         raise HTTPException(
